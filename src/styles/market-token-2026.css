@@ -1,0 +1,825 @@
+/* ==========================================================================
+   بازار · تب «توکن» — ویترین، جستجو، فیلترها و کارت‌های توکن (۲۰۲۶-۱۱-۲۵)
+   --------------------------------------------------------------------------
+   Six requests, one last layer:
+
+     1 · the showcase («ویترین / نبض بازار» + «داغ‌ترین‌ها») gets its own prism
+         palette, an asymmetric modern shape and a short travelling light;
+     2 · the «همه ارزها» card and its search field are rebuilt in the same
+         material, with THREE compact drop-down fields under the search box
+         (بازه زمانی · تغییر ۲۴ساعته · ترتیب بندی) and smaller chips below them;
+     3 · with NO filter chosen the chip row is ordinary flow — it scrolls down
+         with the page. The loaded-scope sentence is gone at the source;
+     4 · every token is a slim glass card and the swap box beside it is a
+         SEPARATE glass box in the same colour, not part of the token's frame;
+     5 · a full modern re-grade for phone, tablet and desktop, light and dark;
+     6 · the swap button stays OUTSIDE the token card, as it was before.
+
+   MATERIAL RULES (measured on this route, not taste):
+     · no live backdrop-filter, no mask, no will-change, no content-visibility;
+       the glass is a translucent gradient plate with a hairline and a specular
+       top edge — it costs nothing while the reader scrolls 250 rows;
+     · the only keyframes here are FINITE (2 or 3 iterations) and animate
+       transform/opacity only. There is deliberately no infinite ambient loop
+       to add to the route's scroll budget; the off-switch is a real guard;
+     · no number, label, route or data source is added, removed or faked;
+     · every selector is scoped to `.mx-market`, so no other route pays for it.
+   ========================================================================== */
+
+/* ══ 0 · THE LOCAL PALETTE — four voices, one family, two themes ═════════════ */
+.mx-market .mx-tab-panel {
+  --m26-a: #4fe3d0;              /* aqua   · the primary voice */
+  --m26-b: #7b8cff;              /* indigo · the cool counter */
+  --m26-c: #c084fc;              /* violet · the warm counter */
+  --m26-d: #ffb86b;              /* amber  · discovery */
+  --m26-ink: #eef5ff;
+  --m26-muted: #9fb2cf;
+  --m26-line: rgba(178, 210, 255, .16);
+  --m26-line-strong: rgba(178, 210, 255, .30);
+  --m26-plate-a: #101d2d;
+  --m26-plate-b: #0a1220;
+  --m26-rim: linear-gradient(115deg, var(--m26-a), var(--m26-b) 38%, var(--m26-c) 70%, var(--m26-d));
+  --m26-inner:
+    linear-gradient(155deg, var(--m26-plate-a), var(--m26-plate-b));
+  --m26-bevel: inset 0 1px 0 rgba(255, 255, 255, .08), inset 0 -1px 0 rgba(2, 8, 20, .34);
+  --m26-lift: 0 20px 46px -34px rgba(0, 0, 0, .9);
+}
+:root[data-theme='light'] .mx-market .mx-tab-panel {
+  --m26-a: #0d938c;
+  --m26-b: #4a5fd0;
+  --m26-c: #8a4fc2;
+  --m26-d: #c1762a;
+  --m26-ink: #17243b;
+  --m26-muted: #5b6d8b;
+  --m26-line: rgba(30, 55, 100, .14);
+  --m26-line-strong: rgba(30, 55, 100, .28);
+  --m26-plate-a: #ffffff;
+  --m26-plate-b: #f2f6fc;
+  --m26-bevel: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(46, 67, 123, .08);
+  --m26-lift: 0 18px 38px -32px rgba(35, 55, 100, .45);
+}
+
+/* ══ 1 · THE SHOWCASE — «نبض بازار» و «داغ‌ترین‌ها» ═════════════════════════ */
+.mx-market .mx-lens,
+.mx-market .mx-hot,
+.mx-market .hot-coins,
+.mx-market [data-testid='hot-coins'] {
+  position: relative !important;
+  isolation: isolate;
+  overflow: hidden !important;
+  padding: 14px 15px !important;
+  border: 1px solid transparent !important;
+  /* An asymmetric, quieter bottom edge reads as a designed object rather
+     than another rounded rectangle in a stack of rounded rectangles. */
+  border-radius: 26px 26px 19px 19px !important;
+  background:
+    radial-gradient(85% 130% at 100% -8%, color-mix(in srgb, var(--m26-b) 20%, transparent), transparent 62%) padding-box,
+    radial-gradient(90% 120% at 0% 108%, color-mix(in srgb, var(--m26-c) 17%, transparent), transparent 64%) padding-box,
+    var(--m26-inner) padding-box,
+    var(--m26-rim) border-box !important;
+  box-shadow: var(--m26-lift), var(--m26-bevel) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+/* Discovery keeps the same material but leads with the amber end. */
+.mx-market .mx-hot,
+.mx-market .hot-coins,
+.mx-market [data-testid='hot-coins'] {
+  background:
+    radial-gradient(90% 130% at 4% -10%, color-mix(in srgb, var(--m26-d) 20%, transparent), transparent 62%) padding-box,
+    radial-gradient(88% 120% at 100% 108%, color-mix(in srgb, var(--m26-b) 16%, transparent), transparent 64%) padding-box,
+    var(--m26-inner) padding-box,
+    linear-gradient(125deg, var(--m26-d), var(--m26-c) 42%, var(--m26-b) 78%, var(--m26-a)) border-box !important;
+}
+/* Content above the light, never inside it. */
+.mx-market .mx-lens > :not(.mx26-rim):not(.mx26-orb):not(.mx26-gloss),
+.mx-market .mx-hot > :not(.mx26-hot-rim):not(.mx26-hot-orb),
+.mx-market .mx-terminal > :not(.mx26-terminal-rim):not(.mx26-terminal-glow) {
+  position: relative;
+  z-index: 2;
+}
+
+/* The travelling hairlines: two phases of the SAME four-voice gradient, one on
+   the top edge and one on the bottom edge, crossing by opacity. Finite (3
+   cycles) so the route's scroll budget gains no permanent loop. */
+.mx-market .mx26-rim,
+.mx-market .mx26-rim-b,
+.mx-market .mx26-terminal-rim,
+.mx-market .mx26-hot-rim {
+  position: absolute;
+  z-index: 3;
+  inset-block-start: 0;
+  inset-inline: 10%;
+  height: 2px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--m26-a), var(--m26-b), var(--m26-c), var(--m26-d), transparent);
+  opacity: .85;
+  animation: mx26-rim-travel 6.5s ease-in-out 3 both;
+}
+.mx-market .mx26-rim-b {
+  inset-block-start: auto;
+  inset-block-end: 0;
+  background: linear-gradient(90deg, transparent, var(--m26-d), var(--m26-c), var(--m26-b), var(--m26-a), transparent);
+  opacity: .18;
+  animation: mx26-rim-cross 6.5s ease-in-out 3 both;
+}
+.mx-market .mx26-terminal-rim {
+  inset-inline: 14%;
+  animation-delay: .12s;
+}
+.mx-market .mx26-hot-rim {
+  inset-inline: 8%;
+  background: linear-gradient(90deg, transparent, var(--m26-d), var(--m26-c), var(--m26-b), transparent);
+  animation-delay: .2s;
+}
+
+/* Two slow light pools and one specular band. All transform/opacity only. */
+.mx-market .mx26-orb,
+.mx-market .mx26-terminal-glow,
+.mx-market .mx26-hot-orb {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: -46%;
+  inset-inline-end: -16%;
+  width: 58%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--m26-b) 24%, transparent), transparent 68%);
+  opacity: .7;
+  animation: mx26-orb-drift 9s ease-in-out 2 alternate both;
+}
+.mx-market .mx26-terminal-glow {
+  inset-block-start: auto;
+  inset-block-end: -60%;
+  inset-inline-end: auto;
+  inset-inline-start: -18%;
+  width: 52%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--m26-c) 20%, transparent), transparent 68%);
+  animation-delay: .25s;
+}
+.mx-market .mx26-hot-orb {
+  inset-inline-end: auto;
+  inset-inline-start: -18%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--m26-d) 22%, transparent), transparent 68%);
+  animation-delay: .35s;
+}
+.mx-market .mx26-gloss {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: -45%;
+  inset-inline-start: 0;
+  width: 28%;
+  height: 190%;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .055) 48%, transparent);
+  transform: translate3d(-180%, 0, 0);
+  opacity: 0;
+  animation: mx26-gloss-sweep 7.5s ease-in-out 2 both;
+}
+:root[dir='rtl'] .mx-market .mx26-gloss,
+[dir='rtl'] .mx-market .mx26-gloss { transform: translate3d(180%, 0, 0); }
+
+@keyframes mx26-rim-travel {
+  0%   { transform: translate3d(-7%, 0, 0) scaleX(.84); opacity: .35; }
+  50%  { transform: translate3d(7%, 0, 0) scaleX(1.04); opacity: .95; }
+  100% { transform: translate3d(-7%, 0, 0) scaleX(.84); opacity: .35; }
+}
+@keyframes mx26-rim-cross {
+  0%, 100% { opacity: .12; transform: translate3d(6%, 0, 0); }
+  50%      { opacity: .78; transform: translate3d(-6%, 0, 0); }
+}
+@keyframes mx26-orb-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-12%, 9%, 0) scale(1.14); }
+}
+@keyframes mx26-gloss-sweep {
+  0%, 18%   { transform: translate3d(-180%, 0, 0); opacity: 0; }
+  38%       { opacity: 1; }
+  72%, 100% { transform: translate3d(430%, 0, 0); opacity: 0; }
+}
+:root[dir='rtl'] .mx-market .mx26-gloss,
+[dir='rtl'] .mx-market .mx26-gloss { animation-name: mx26-gloss-sweep-rtl; }
+@keyframes mx26-gloss-sweep-rtl {
+  0%, 18%   { transform: translate3d(180%, 0, 0); opacity: 0; }
+  38%       { opacity: 1; }
+  72%, 100% { transform: translate3d(-430%, 0, 0); opacity: 0; }
+}
+
+/* The hot cards stay a ranked board; only their frame joins the family. */
+.mx-market .mx-hot-card {
+  border: 1px solid var(--m26-line) !important;
+  border-radius: 16px !important;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--m26-b) 10%, transparent), color-mix(in srgb, var(--m26-a) 5%, transparent)),
+    var(--m26-inner) !important;
+  box-shadow: var(--m26-bevel) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: transform .2s ease, border-color .2s ease;
+}
+.mx-market .mx-hot-card:hover {
+  border-color: color-mix(in srgb, var(--m26-a) 40%, transparent) !important;
+}
+.mx-market .mx-section-head h2 { color: var(--m26-ink); }
+.mx-market .mx-hot-flame { color: var(--m26-d); }
+.mx-market .mx-section-note { color: var(--m26-muted); }
+
+/* ══ 2 · «همه ارزها» — THE CARD AND ITS SEARCH FIELD ═══════════════════════ */
+.mx-market .mx-terminal {
+  position: relative !important;
+  isolation: isolate;
+  padding: 16px !important;
+  border: 1px solid transparent !important;
+  border-radius: 24px 24px 20px 20px !important;
+  background:
+    radial-gradient(90% 120% at 100% -10%, color-mix(in srgb, var(--m26-a) 16%, transparent), transparent 60%) padding-box,
+    radial-gradient(84% 120% at 0% 110%, color-mix(in srgb, var(--m26-c) 16%, transparent), transparent 62%) padding-box,
+    var(--m26-inner) padding-box,
+    linear-gradient(130deg, var(--m26-a), var(--m26-b) 44%, var(--m26-c) 76%, var(--m26-d)) border-box !important;
+  box-shadow: var(--m26-lift), var(--m26-bevel) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.mx-market .mx-list-hero { gap: 11px !important; }
+.mx-market .mx-list-title { color: var(--m26-ink); }
+.mx-market .market-count {
+  color: var(--m26-ink) !important;
+  border-color: var(--m26-line-strong) !important;
+  background: color-mix(in srgb, var(--m26-a) 10%, transparent) !important;
+}
+.mx-market .mx-terminal-title::before,
+.mx-market .mx-list-title::before {
+  background: linear-gradient(var(--m26-a), var(--m26-c));
+}
+
+/* The search field: a prism frame, a smoked glass plate and a moving hairline.
+   `position: relative` is restored here because the results popup is anchored
+   to THIS wrapper (an earlier pass had made it static). */
+.mx-market .mx-search-wrap {
+  position: relative !important;
+  z-index: 12 !important;
+  min-width: 0;
+}
+.mx-market .mx-search {
+  min-height: 54px !important;
+  padding: 0 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: 16px !important;
+  background:
+    radial-gradient(80% 180% at 0% 0%, color-mix(in srgb, var(--m26-a) 12%, transparent), transparent 66%) padding-box,
+    linear-gradient(150deg, color-mix(in srgb, var(--m26-b) 12%, transparent), color-mix(in srgb, var(--m26-c) 7%, transparent)) padding-box,
+    var(--m26-inner) padding-box,
+    linear-gradient(105deg, var(--m26-a), var(--m26-b) 42%, var(--m26-c) 72%, var(--m26-d)) border-box !important;
+  box-shadow: var(--m26-bevel), 0 12px 30px -24px color-mix(in srgb, var(--m26-a) 80%, transparent) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: box-shadow .2s ease;
+}
+.mx-market .mx-search:focus-within {
+  box-shadow: var(--m26-bevel), 0 0 0 3px color-mix(in srgb, var(--m26-a) 18%, transparent), 0 16px 34px -24px color-mix(in srgb, var(--m26-a) 90%, transparent) !important;
+}
+.mx-market .mx26-search-rim {
+  position: absolute;
+  z-index: 3;
+  inset-block-start: 0;
+  inset-inline: 8%;
+  height: 2px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--m26-a), var(--m26-b), var(--m26-c), var(--m26-d), transparent);
+  opacity: .8;
+  animation: mx26-rim-travel 6.5s ease-in-out 3 both;
+}
+.mx-market .mx-search-tile {
+  display: grid !important;
+  place-items: center;
+  width: 34px !important;
+  height: 34px !important;
+  border: 1px solid var(--m26-line-strong) !important;
+  border-radius: 11px !important;
+  background: color-mix(in srgb, var(--m26-a) 12%, transparent) !important;
+  color: var(--m26-a) !important;
+}
+.mx-market .mx-search-icon { color: inherit; }
+.mx-market .mx-search-input {
+  height: 52px !important;
+  color: var(--m26-ink) !important;
+  font-size: 12.5px !important;
+}
+.mx-market .mx-search-input::placeholder { color: var(--m26-muted) !important; opacity: 1; }
+.mx-market .mx-search-ai {
+  border-color: color-mix(in srgb, var(--m26-c) 32%, transparent) !important;
+  background: color-mix(in srgb, var(--m26-c) 12%, transparent) !important;
+  color: var(--m26-c) !important;
+}
+.mx-market .mx-search-clear {
+  border-color: var(--m26-line-strong) !important;
+  background: color-mix(in srgb, var(--m26-b) 10%, transparent) !important;
+  color: var(--m26-muted) !important;
+}
+.mx-market .mx-search-popup,
+.mx-market .mx-sort-popover,
+.mx-market .mx26-field-menu {
+  border: 1px solid var(--m26-line-strong) !important;
+  border-radius: 15px !important;
+  background: var(--m26-inner) !important;
+  box-shadow: 0 22px 48px -26px rgba(0, 0, 0, .85), var(--m26-bevel) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: var(--m26-ink);
+}
+.mx-market .mx-search-option:is(:hover, [data-active='true']) {
+  background: color-mix(in srgb, var(--m26-a) 12%, transparent) !important;
+}
+
+/* ══ 3 · THREE DROP-DOWN FILTERS UNDER THE SEARCH ═════════════════════════ */
+.mx-market .mx26-dock {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 2px;
+}
+.mx-market .mx26-field {
+  position: relative;
+  min-width: 0;
+  padding: 7px 8px 8px;
+  border: 1px solid var(--m26-line);
+  border-radius: 14px;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--m26-b) 11%, transparent), color-mix(in srgb, var(--m26-a) 5%, transparent)),
+    var(--m26-inner);
+  box-shadow: var(--m26-bevel);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.mx-market .mx26-field::before {
+  content: '';
+  position: absolute;
+  inset-block-start: -1px;
+  inset-inline: 16%;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--m26-a), transparent);
+  opacity: .6;
+  pointer-events: none;
+}
+.mx-market .mx26-field[data-field='change']::before {
+  background: linear-gradient(90deg, transparent, var(--m26-d), transparent);
+}
+.mx-market .mx26-field[data-field='sort']::before {
+  background: linear-gradient(90deg, transparent, var(--m26-c), transparent);
+}
+.mx-market .mx26-field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--m26-muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mx-market .mx26-field-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--m26-line-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--m26-b) 9%, transparent);
+  color: var(--m26-ink);
+  font: 700 11px/1 var(--font-display);
+  cursor: pointer;
+  transition: border-color .18s ease, background-color .18s ease, transform .18s ease;
+}
+.mx-market .mx26-field-trigger:hover {
+  border-color: color-mix(in srgb, var(--m26-a) 48%, transparent);
+  background: color-mix(in srgb, var(--m26-a) 10%, transparent);
+}
+.mx-market .mx26-field-trigger:active { transform: scale(.985); }
+.mx-market .mx26-field-trigger:focus-visible {
+  outline: 2px solid var(--m26-a);
+  outline-offset: 2px;
+}
+.mx-market .mx26-field-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-market .mx26-field-caret { flex: 0 0 auto; color: var(--m26-a); transition: transform .2s ease; }
+.mx-market .mx26-field[data-open='true'] .mx26-field-caret { transform: rotate(180deg); }
+.mx-market .mx26-field[data-open='true'] { border-color: color-mix(in srgb, var(--m26-a) 42%, transparent); }
+
+/* The menus are real popovers, anchored to their own field. */
+.mx-market .mx26-field-menu {
+  display: none;
+  position: absolute;
+  z-index: 40;
+  inset-block-start: calc(100% + 6px);
+  inset-inline: 0;
+  padding: 6px;
+}
+.mx-market .mx26-field[data-open='true'] > .mx26-field-menu { display: block; }
+.mx-market .mx26-field-menu .mx-horizon {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  min-width: 0;
+}
+.mx-market .mx26-field-menu .mx-horizon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--m26-muted);
+  font-size: 11px;
+}
+.mx-market .mx26-field-menu .mx-horizon-btn:hover { color: var(--m26-ink); }
+.mx-market .mx26-field-menu .mx-horizon-btn[data-active='true'] {
+  color: var(--m26-a);
+  border-color: color-mix(in srgb, var(--m26-a) 34%, transparent);
+  background: color-mix(in srgb, var(--m26-a) 12%, transparent);
+}
+.mx-market .mx26-field-menu .mx-horizon-note {
+  display: block;
+  padding: 6px 4px 2px;
+  color: var(--m26-muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.mx-market .mx26-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--m26-muted);
+  font: 600 11px/1 var(--font-display);
+  text-align: start;
+  cursor: pointer;
+}
+.mx-market .mx26-option:hover,
+.mx-market .mx26-option[aria-checked='true'] {
+  color: var(--m26-a);
+  background: color-mix(in srgb, var(--m26-a) 12%, transparent);
+}
+.mx-market .mx26-option:focus-visible { outline: 2px solid var(--m26-a); outline-offset: -2px; }
+
+/* The sort field keeps its own menu, popover and direction button. */
+.mx-market .mx26-field[data-field='sort'] .mx-sort-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+.mx-market .mx26-field[data-field='sort'] .mx-sort-trigger {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--m26-line-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--m26-b) 9%, transparent);
+  color: var(--m26-ink);
+  font-size: 10.5px;
+  gap: 6px;
+}
+.mx-market .mx26-field[data-field='sort'] .mx-sort-caret { color: var(--m26-c); }
+.mx-market .mx26-field[data-field='sort'] .market-dir {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--m26-line-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--m26-c) 9%, transparent);
+  color: var(--m26-c);
+}
+.mx-market .mx26-field[data-field='sort'] .mx-sort-popover {
+  inset-inline-end: auto;
+  inset-inline-start: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  width: max-content;
+  min-width: 178px;
+  padding: 5px;
+}
+.mx-market .mx-sort-option {
+  color: var(--m26-muted);
+  border-radius: 9px;
+}
+.mx-market .mx-sort-option:is(:hover, :focus-visible, [aria-checked='true']) {
+  color: var(--m26-a);
+  background: color-mix(in srgb, var(--m26-a) 12%, transparent);
+}
+.mx-market .mx-sort-check { color: var(--m26-a); }
+
+/* ══ 4 · THE SMALL CHIP ROW — STATIC UNTIL A FILTER IS CHOSEN ══════════════ */
+.mx-market .mx-controls.mx26-chips {
+  display: block !important;
+  position: static;
+  margin: 0 !important;
+  padding: 6px 8px !important;
+  border: 1px solid var(--m26-line);
+  border-radius: 15px;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--m26-a) 7%, transparent), color-mix(in srgb, var(--m26-c) 7%, transparent)),
+    var(--m26-inner);
+  box-shadow: var(--m26-bevel);
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.mx-market .mx26-chips[data-active='true'] {
+  position: sticky;
+  top: calc(var(--market-tabs-top, 63px) + 6px);
+  z-index: 9;
+  border-color: color-mix(in srgb, var(--m26-a) 34%, transparent);
+  box-shadow: var(--m26-bevel), 0 16px 32px -26px rgba(0, 0, 0, .9);
+}
+.mx-market .mx26-chips .mx-views {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  scrollbar-width: none;
+}
+.mx-market .mx26-chips .mx-views::-webkit-scrollbar { display: none; }
+.mx-market .mx26-chips .mx-view {
+  flex: 1 0 auto;
+  min-height: 26px !important;
+  padding: 0 8px !important;
+  gap: 4px !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: var(--m26-muted) !important;
+  font-size: 9.5px !important;
+  font-weight: 700 !important;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: none !important;
+  transition: color .16s ease, background-color .16s ease;
+}
+.mx-market .mx26-chips .mx-view:hover { color: var(--m26-ink) !important; }
+.mx-market .mx26-chips .mx-view[data-active='true'] {
+  color: var(--m26-ink) !important;
+  border-color: color-mix(in srgb, var(--m26-a) 40%, transparent) !important;
+  background: color-mix(in srgb, var(--m26-a) 15%, transparent) !important;
+}
+.mx-market .mx26-chips .mx-view-icon { width: 11px; height: 11px; }
+
+/* ══ 5 · THE TOKEN CARD AND ITS SEPARATE SWAP BOX ═════════════════════════ */
+/* «باکس توکن از نظر عرض زیاده» — the list is capped on wide screens and every
+   row is centred inside that measure, so a 1440px monitor no longer stretches
+   one coin across 960px of empty glass. */
+.mx-market .mx-table-wrap { min-width: 0; margin-inline: auto; }
+.mx-market .mx-coin-row {
+  display: flex !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 0 8px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+/* The token: ONE slim glass card. */
+.mx-market .mx-coin-row > .coin-row {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 7px 10px !important;
+  border: 1px solid var(--m26-line) !important;
+  border-radius: 16px !important;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--m26-b) 11%, transparent), color-mix(in srgb, var(--m26-a) 5%, transparent)),
+    var(--m26-inner) !important;
+  box-shadow: var(--m26-bevel), 0 12px 26px -24px rgba(0, 0, 0, .85) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: border-color .18s ease, transform .18s ease;
+}
+.mx-market .mx-coin-row:hover > .coin-row {
+  border-color: color-mix(in srgb, var(--m26-a) 38%, transparent) !important;
+  transform: translateY(-1px);
+}
+.mx-market .mx-coin-row .coin-row-open {
+  padding: 6px 4px !important;
+  gap: 8px !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+/* «شیشه‌ای با رنگ بندی درست» — the swap box is the SAME material as the token
+   card and is its own element OUTSIDE it, separated by the row's 8px gap. */
+.mx-market .mx-swap-slot { display: none !important; }
+.mx-market .mx-swap-slot[data-available='true'] {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto !important;
+  padding: 4px !important;
+  border: 1px solid var(--m26-line) !important;
+  border-radius: 14px !important;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--m26-b) 11%, transparent), color-mix(in srgb, var(--m26-a) 5%, transparent)),
+    var(--m26-inner) !important;
+  box-shadow: var(--m26-bevel), 0 12px 26px -24px rgba(0, 0, 0, .85) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.mx-market .mx-swap-btn,
+.mx-market .market-swap-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 5px !important;
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 10px !important;
+  border: 1px solid color-mix(in srgb, var(--m26-a) 34%, transparent) !important;
+  border-radius: 10px !important;
+  background: color-mix(in srgb, var(--m26-a) 12%, transparent) !important;
+  color: var(--m26-ink) !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: background-color .18s ease, transform .18s ease;
+}
+.mx-market .mx-swap-btn:hover,
+.mx-market .market-swap-btn:hover {
+  background: color-mix(in srgb, var(--m26-a) 22%, transparent) !important;
+  transform: translateY(-1px);
+}
+.mx-market .mx-swap-btn:focus-visible,
+.mx-market .market-swap-btn:focus-visible { outline: 2px solid var(--m26-a); outline-offset: 2px; }
+
+/* The rest of the list surface reads from the same plate. */
+.mx-market .mx-empty,
+.mx-market .mx-skel-row,
+.mx-market .mx-more-results {
+  border: 1px solid var(--m26-line) !important;
+  border-radius: 18px !important;
+  background: var(--m26-inner) !important;
+  color: var(--m26-ink) !important;
+  box-shadow: var(--m26-bevel) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.mx-market .mx-show-more,
+.mx-market .mx-list-fold,
+.mx-market .mx-empty-action {
+  min-width: 0 !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding: 0 14px !important;
+  border: 1px solid var(--m26-line-strong) !important;
+  border-radius: 999px !important;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--m26-a) 12%, transparent), color-mix(in srgb, var(--m26-c) 12%, transparent)),
+    var(--m26-inner) !important;
+  color: var(--m26-ink) !important;
+  font-size: 11.5px !important;
+  box-shadow: var(--m26-bevel) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.mx-market .mx-show-more:hover,
+.mx-market .mx-list-fold:hover { border-color: color-mix(in srgb, var(--m26-a) 48%, transparent) !important; }
+.mx-market .mx-showing-mini { color: var(--m26-muted) !important; }
+.mx-market .mx-category-note {
+  color: var(--m26-muted) !important;
+  border: 1px solid var(--m26-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--m26-b) 6%, transparent);
+}
+
+/* ══ 6 · THE PEARL THEME — re-graded, never inverted ══════════════════════ */
+:root[data-theme='light'] .mx-market .mx-lens,
+:root[data-theme='light'] .mx-market .mx-hot,
+:root[data-theme='light'] .mx-market .mx-terminal,
+:root[data-theme='light'] .mx-market .mx-search,
+:root[data-theme='light'] .mx-market .mx26-field,
+:root[data-theme='light'] .mx-market .mx-controls.mx26-chips,
+:root[data-theme='light'] .mx-market .mx-coin-row > .coin-row,
+:root[data-theme='light'] .mx-market .mx-swap-slot[data-available='true'],
+:root[data-theme='light'] .mx-market .mx-hot-card,
+:root[data-theme='light'] .mx-market .mx-search-popup,
+:root[data-theme='light'] .mx-market .mx-sort-popover,
+:root[data-theme='light'] .mx-market .mx26-field-menu {
+  box-shadow: var(--m26-bevel), var(--m26-lift) !important;
+}
+:root[data-theme='light'] .mx-market .mx26-gloss { background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .5) 48%, transparent); }
+:root[data-theme='light'] .mx-market .mx26-hot-card,
+:root[data-theme='light'] .mx-market .mx-swap-btn,
+:root[data-theme='light'] .mx-market .market-swap-btn,
+:root[data-theme='light'] .mx-market .mx26-field-trigger,
+:root[data-theme='light'] .mx-market .mx26-field[data-field='sort'] .mx-sort-trigger,
+:root[data-theme='light'] .mx-market .mx-search-tile { color: var(--m26-ink) !important; }
+:root[data-theme='light'] .mx-market .mx-search-input { color: var(--m26-ink) !important; }
+:root[data-theme='light'] .mx-market .mx-section-head h2,
+:root[data-theme='light'] .mx-market .mx-list-title { color: var(--m26-ink) !important; }
+:root[data-theme='light'] .mx-market .mx-view { color: var(--m26-muted) !important; }
+:root[data-theme='light'] .mx-market .mx26-chips .mx-view[data-active='true'] { color: var(--m26-ink) !important; }
+
+/* ══ 7 · RESPONSIVE — phone, tablet, desktop ══════════════════════════════ */
+@media (min-width: 720px) {
+  .mx-market .mx26-dock { gap: 10px; }
+  .mx-market .mx26-field { padding: 9px 11px 10px; }
+  .mx-market .mx26-field-label { font-size: 9.5px; }
+  .mx-market .mx26-field-trigger { min-height: 33px; font-size: 11.5px; }
+  .mx-market .mx26-chips .mx-view { min-height: 28px !important; font-size: 10px !important; }
+}
+@media (min-width: 1024px) {
+  .mx-market .mx-table-wrap { max-width: 880px; }
+  .mx-market .mx-coin-row { max-width: 790px; margin-inline: auto !important; }
+  .mx-market .mx26-dock { gap: 12px; }
+  .mx-market .mx-terminal { padding: 18px !important; }
+  .mx-market .mx-lens,
+  .mx-market .mx-hot { padding: 16px 18px !important; }
+}
+@media (max-width: 719px) {
+  /* Two fields on one row, the sort field full width below them; on a phone
+     all three stack so every label and value is legible at 360px. */
+  .mx-market .mx26-dock { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mx-market .mx26-field[data-field='sort'] { grid-column: 1 / -1; }
+  .mx-market .mx-terminal { padding: 13px !important; }
+  .mx-market .mx-search { min-height: 50px !important; }
+  .mx-market .mx-search-input { height: 48px !important; font-size: 12px !important; }
+  .mx-market .mx-lens,
+  .mx-market .mx-hot { padding: 12px !important; }
+  .mx-market .mx-coin-row { gap: 6px !important; }
+  .mx-market .mx-coin-row > .coin-row { padding: 6px 8px !important; }
+  .mx-market .mx-swap-btn,
+  .mx-market .market-swap-btn { padding: 0 8px !important; font-size: 9.5px !important; }
+}
+@media (max-width: 430px) {
+  .mx-market .mx26-dock { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+  .mx-market .mx26-field[data-field='sort'] { grid-column: auto; }
+  .mx-market .mx26-field { padding: 6px 8px 7px; }
+  .mx-market .mx26-chips .mx-view { padding: 0 6px !important; font-size: 9px !important; }
+  .mx-market .mx-swap-label { display: none; }
+  .mx-market .mx-swap-slot[data-available='true'] { padding: 3px !important; }
+  .mx-market .mx-swap-btn,
+  .mx-market .market-swap-btn { width: 30px; padding: 0 !important; }
+  .mx-market .mx-search-ai { display: none; }
+}
+
+/* ══ 8 · MOTION OFF-SWITCHES ══════════════════════════════════════════════
+   Every finite loop above is transform/opacity only. A reader who asks for
+   less motion, or an app running in the native/lite shell, gets the finished
+   frame with no movement — never a half-painted card. */
+@media (prefers-reduced-motion: reduce) {
+  .mx-market :is(.mx26-rim, .mx26-rim-b, .mx26-orb, .mx26-gloss,
+    .mx26-terminal-rim, .mx26-terminal-glow, .mx26-hot-rim, .mx26-hot-orb,
+    .mx26-search-rim) { animation: none !important; }
+  .mx-market :is(.mx-hot-card, .mx-coin-row > .coin-row, .mx-swap-btn,
+    .market-swap-btn, .mx26-field-trigger, .mx-search) { transition: none !important; }
+}
+:root[data-reduce-motion='true'] .mx-market :is(.mx26-rim, .mx26-rim-b, .mx26-orb,
+  .mx26-gloss, .mx26-terminal-rim, .mx26-terminal-glow, .mx26-hot-rim,
+  .mx26-hot-orb, .mx26-search-rim) { animation: none !important; }
+:root[data-native='true'] .mx-market :is(.mx26-rim, .mx26-rim-b, .mx26-orb,
+  .mx26-gloss, .mx26-terminal-rim, .mx26-terminal-glow, .mx26-hot-rim,
+  .mx26-hot-orb, .mx26-search-rim) { animation: none !important; }
+:root[data-lite='true'] .mx-market :is(.mx26-rim, .mx26-rim-b, .mx26-orb,
+  .mx26-gloss, .mx26-terminal-rim, .mx26-terminal-glow, .mx26-hot-rim,
+  .mx26-hot-orb, .mx26-search-rim) { animation: none !important; }
+@media (prefers-contrast: more) {
+  .mx-market .mx-lens,
+  .mx-market .mx-hot,
+  .mx-market .mx-terminal,
+  .mx-market .mx-coin-row > .coin-row,
+  .mx-market .mx-swap-slot[data-available='true'] { border-color: var(--m26-line-strong) !important; }
+}

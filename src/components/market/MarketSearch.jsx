@@ -113,6 +113,9 @@ export default function MarketSearch({
     <div className="mx-search-wrap" id="market-search" data-testid="market-search-wrap" ref={wrapRef}>
       <div className={`mx-search${open ? ' is-open' : ''}`} data-typed={query ? 'true' : undefined}>
         <span className="mx-search-glow" aria-hidden="true" />
+        {/* A travelling prism hairline on the field's own edge. Decoration
+            only: the input, the results list and the clear button are unchanged. */}
+        <span className="mx26-search-rim" aria-hidden="true" />
         <span className="mx-search-tile" aria-hidden="true">
           <IconSearch className="mx-search-icon" width={16} height={16} aria-hidden="true" />
         </span>

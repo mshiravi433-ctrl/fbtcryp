@@ -325,7 +325,12 @@
     "categoryPartial": "Sınırlı yedek liste eksik veya güncel olmayabilir.",
     "categoryStale": "Önbellekteki veriler güncel olmayabilir.",
     "categoryLimit": "En fazla 2.500 token yüklenebilir.",
-    "sortLoadedOnly": "Arama ve sıralama yalnızca yüklenen tokenları kapsar; daha fazla sonuç için sonraki sayfayı yükleyin.",
+    "filterDock": {
+      "horizon": "Zaman aralığı",
+      "change": "24 saatlik değişim",
+      "sort": "Sıralama",
+      "choose": "Bir seçenek belirle"
+    },
     "categoryPageError": "Sonraki sayfa yüklenemedi.",
     "categoryError": "Bu kategori yüklenemedi. Yeniden deneyin.",
     "categoryEmpty": "Bu kategoride token bulunamadı.",

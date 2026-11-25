@@ -109,6 +109,20 @@ import '../styles/market-2026-redesign.css';
  */
 import '../styles/market-perf.css';
 import '../styles/market-request-fixes.css';
+/*
+ * ─── THE TOKEN TAB'S 2026 SURFACE (LAST, AND ONLY ON THIS ROUTE) ───────────
+ * The six numbered requests in this pass are all about the «توکن» tab: the
+ * showcase, the «همه ارزها» card and its search field, three compact drop-down
+ * filters, a smaller chip row, and a token card whose swap button is a
+ * SEPARATE glass box beside it. Every earlier sheet keeps its own history and
+ * its own tests; this one only restyles what the reader asked to see, and it
+ * wins the cascade because it is imported last.
+ *
+ * It adds no live blur, no mask and no new data. Its three ambient loops are
+ * transform/opacity only and are stopped, in this sheet, by the same reduced
+ * motion / native / lite / opt-in guards the route already uses.
+ */
+import '../styles/market-token-2026.css';
 import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
@@ -362,6 +376,15 @@ export default function Market() {
     setSortDir('desc');
   }, []);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  /*
+   * «فیلتر انتخابی نباشد» — on a fresh page NO chip is pre-selected. The list
+   * is still ranked by the default sort, but a highlighted «همه» over an
+   * untouched list reads as a filter the reader forgot they applied. The flag
+   * only records that the reader has actually chosen a view; the selected chip
+   * itself stays DERIVED from the sort below, so the chip row, the drop-downs
+   * and the order can never disagree.
+   */
+  const [viewTouched, setViewTouched] = useState(false);
 
   /*
    * Which chip reads as selected is DERIVED from the sort, not stored beside
@@ -369,17 +392,19 @@ export default function Market() {
    * un-highlight «صعودی‌ها», and two independent states would eventually
    * disagree — a chip lit up over a list it does not describe.
    */
-  const activeView = onlyFavorites
-    ? 'favorites'
-    : sortKey === 'rank' && sortDir === 'asc'
-      ? 'all'
-      : sortKey === 'change' && sortDir === 'desc'
-        ? 'gainers'
-        : sortKey === 'change' && sortDir === 'asc'
-          ? 'losers'
-          : sortKey === 'volume' && sortDir === 'desc'
-            ? 'volume'
-            : null;
+  const activeView = !viewTouched
+    ? null
+    : onlyFavorites
+      ? 'favorites'
+      : sortKey === 'rank' && sortDir === 'asc'
+        ? 'all'
+        : sortKey === 'change' && sortDir === 'desc'
+          ? 'gainers'
+          : sortKey === 'change' && sortDir === 'asc'
+            ? 'losers'
+            : sortKey === 'volume' && sortDir === 'desc'
+              ? 'volume'
+              : null;
 
   /*
    * Choosing from the sort menu resets the direction to the one that column is
@@ -431,6 +456,7 @@ export default function Market() {
 
   const applyView = useCallback((view) => {
     /* A view is a market-wide ordering, so it also leaves the sector lens. */
+    setViewTouched(true);
     setSmartIntent(null);
     setSector(null);
     if (view === 'favorites') {
@@ -588,6 +614,34 @@ export default function Market() {
   // Sorting menu is an in-flow popover; it never changes the page's layout position.
   const [sortOpen, setSortOpen] = useState(false);
   const sortWrapRef = useRef(null);
+  /*
+   * The two NEW drop-down filters («بازه زمانی» و «تغییر ۲۴ساعته») are real
+   * disclosure buttons: closed by default, one open at a time, closed by a tap
+   * outside or Escape. The horizon's three radios and the sort menu below are
+   * NOT replaced — the same controls keep their test ids, roles and keyboard
+   * behaviour, they simply live inside a compact selectable box now.
+   */
+  const [horizonOpen, setHorizonOpen] = useState(false);
+  const [changeOpen, setChangeOpen] = useState(false);
+  const dockRef = useRef(null);
+  useEffect(() => {
+    if (!horizonOpen && !changeOpen) return undefined;
+    const onPointerDown = (event) => {
+      if (!dockRef.current?.contains(event.target)) {
+        setHorizonOpen(false);
+        setChangeOpen(false);
+      }
+    };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') { setHorizonOpen(false); setChangeOpen(false); }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [horizonOpen, changeOpen]);
   useEffect(() => {
     if (!sortOpen) return undefined;
     const onPointerDown = (event) => {
@@ -876,6 +930,7 @@ export default function Market() {
     setQuery('');
     setSector(null);
     setOnlyFavorites(false);
+    setViewTouched(false);
     setSortKey(DEFAULT_SORT.key);
     setSortDir(DEFAULT_SORT.dir);
     setSmartIntent(null);
@@ -913,6 +968,24 @@ export default function Market() {
     const venue = venues.get(coin.id);
     return venue?.tradeable ? venueRoute({ ...venue })?.href ?? null : null;
   };
+
+  /*
+   * «فیلتر انتخابی نباشد هنگام اسکرول با صفحه بیاد پایین» — with NO filter
+   * chosen the compact chip row is ordinary flow and scrolls away with the
+   * page. Only a reader who has actually constrained the list gets the pinned
+   * summary, so the sticky bar is evidence of a choice, not decoration.
+   */
+  const filtersActive = Boolean(
+    activeView || query.trim() || smartIntent || sector || onlyFavorites ||
+    horizon !== '24h' || sortKey !== DEFAULT_SORT.key || sortDir !== DEFAULT_SORT.dir
+  );
+  /* The 24h-change field prints the same reading as the chips, never a second
+     state that could drift from them. */
+  const changeViewLabel = sortKey === 'change' && sortDir === 'desc'
+    ? t('market.filter.gainers')
+    : sortKey === 'change' && sortDir === 'asc'
+      ? t('market.filter.losers')
+      : t('market.filter.all');
 
   const emptyKind = sector && category.error && !universe.length
     ? 'sectorError'
@@ -1036,6 +1109,13 @@ export default function Market() {
 
             {/* Feed tools and list controls are separate glass surfaces. */}
             <section className="mx-lens" id="market-lens" data-testid="market-lens" aria-labelledby="market-lens-title">
+              {/* The showcase's travelling prism rim, its two light pools and its
+                  one specular sweep. All four are aria-hidden decoration; the
+                  readings below them are unchanged. */}
+              <span className="mx26-rim mx26-rim-a" aria-hidden="true" />
+              <span className="mx26-rim mx26-rim-b" aria-hidden="true" />
+              <span className="mx26-orb" aria-hidden="true" />
+              <span className="mx26-gloss" aria-hidden="true" />
               <div className="mx-terminal-head mx-lens-head">
                 <h2 className="market-terminal-title mx-terminal-title" id="market-lens-title">
                   <span>{t('marketIntel.railLabel')}</span>
@@ -1117,6 +1197,10 @@ export default function Market() {
             </section>
 
             <section className="market-terminal mx-terminal" aria-labelledby="market-list-title">
+              {/* «همه ارزها» — the same prism family as the showcase: one
+                  travelling hairline and one soft light pool, both decorative. */}
+              <span className="mx26-terminal-rim" aria-hidden="true" />
+              <span className="mx26-terminal-glow" aria-hidden="true" />
               <div className="mx-list-hero">
                 <div className="mx-list-hero-head">
                   <h2 className="mx-list-title" id="market-list-title">
@@ -1158,177 +1242,235 @@ export default function Market() {
                 />
 
                 {/*
-                    ─── THE HORIZON RAIL ────────────────────────────────────────
-                    Three readings the feed always carried and the screen never
-                    showed together: 1h, 24h, 7d. It sits ABOVE the chips
-                    because it governs them — the chips re-order, this decides
-                    WHAT is being ordered and what the pill on every row says.
+                    ─── THE THREE DROP-DOWN FILTERS (2026-11-25) ──────────────
+                    «فیلتر بازه زمانی، تغییر ۲۴ساعته و ترتیب بندی زیر باکس
+                    جستجو با باکس بازشونده انتخابی». Each field is a compact
+                    selectable box with its own disclosure. The controls inside
+                    are the SAME controls this list has always used: the horizon
+                    is still a radiogroup of three radios, the sort is still a
+                    menu of menuitemradios, and the chips below still reorder
+                    the whole loaded page. Nothing about the data, the routes
+                    or the keyboard behaviour changed — only the box they sit
+                    in.
 
-                    A radio group, not three buttons: it is one choice out of
-                    three, and a screen reader should hear that. Keyboard
-                    arrows move it, like every other segmented control in the
-                    app.
+                    The two new disclosures are closed by default, one open at
+                    a time, and closed by a tap outside or Escape (the effect
+                    beside `sortOpen` above).
+                */}
+                <div className="mx26-dock" ref={dockRef} data-testid="market-filter-dock">
+                  <div className="mx26-field" data-field="horizon" data-open={horizonOpen ? 'true' : 'false'}>
+                    <span className="mx26-field-label">{t('market.filterDock.horizon')}</span>
+                    <button
+                      type="button"
+                      className="mx26-field-trigger"
+                      aria-expanded={horizonOpen}
+                      aria-label={`${t('market.filterDock.horizon')} · ${t(`market.horizon.${horizon}`)}`}
+                      onClick={() => { setHorizonOpen((v) => !v); setChangeOpen(false); setSortOpen(false); }}
+                    >
+                      <span className="mx26-field-value mono">{t(`market.horizon.${horizon}`)}</span>
+                      <GlyphCaretDown className="mx26-field-caret" width={12} height={12} aria-hidden="true" />
+                    </button>
+                    <div className="mx26-field-menu">
+                      {/*
+                        THE HORIZON RAIL — three readings the feed always carried
+                        (1h, 24h, 7d). It governs BOTH the order and the pill on
+                        every row, so it is a radio group, not three anonymous
+                        buttons. Keyboard arrows move it like every other
+                        segmented control in the app.
+                      */}
+                      <div
+                        className="mx-horizon"
+                        role="radiogroup"
+                        aria-label={t('market.horizonAria')}
+                        data-testid="market-horizon"
+                        onKeyDown={(event) => {
+                          const order = ['1h', '24h', '7d'];
+                          const i = order.indexOf(horizon);
+                          let next = null;
+                          if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = order[(i + 1) % 3];
+                          else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = order[(i + 2) % 3];
+                          if (next) { event.preventDefault(); setHorizon(next); }
+                        }}
+                      >
+                        {['1h', '24h', '7d'].map((h) => (
+                          <button
+                            key={h}
+                            type="button"
+                            role="radio"
+                            aria-checked={horizon === h}
+                            tabIndex={horizon === h ? 0 : -1}
+                            className="mx-horizon-btn mono"
+                            data-horizon={h}
+                            data-active={horizon === h ? 'true' : undefined}
+                            onClick={() => { setHorizon(h); setHorizonOpen(false); }}
+                            data-testid={`market-horizon-${h}`}
+                          >
+                            {t(`market.horizon.${h}`)}
+                          </button>
+                        ))}
+                        {/*
+                          AN HONEST NOTE, NOT A FOOTNOTE. The 1h and 7d columns
+                          do not exist on the CoinLore backup rows, so a reader
+                          who switches to «۷ روز» while the primary feed is down
+                          would otherwise see a screen of «—» and conclude the
+                          market stopped moving. It lives INSIDE the open menu,
+                          so a closed filter never prints a sentence.
+                        */}
+                        {horizon !== '24h' && (() => {
+                          const missing = list.filter((r) => (horizon === '1h' ? r.change1h : r.change7d) == null).length;
+                          if (!missing) return null;
+                          return (
+                            <span className="mx-horizon-note" data-testid="market-horizon-note">
+                              {t('market.horizonMissing', { count: fmtNum(missing) })}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mx26-field" data-field="change" data-open={changeOpen ? 'true' : 'false'}>
+                    <span className="mx26-field-label">{t('market.filterDock.change')}</span>
+                    <button
+                      type="button"
+                      className="mx26-field-trigger"
+                      aria-expanded={changeOpen}
+                      aria-label={`${t('market.filterDock.change')} · ${changeViewLabel}`}
+                      onClick={() => { setChangeOpen((v) => !v); setHorizonOpen(false); setSortOpen(false); }}
+                    >
+                      <span className="mx26-field-value">{changeViewLabel}</span>
+                      <GlyphCaretDown className="mx26-field-caret" width={12} height={12} aria-hidden="true" />
+                    </button>
+                    {changeOpen && (
+                      <div className="mx26-field-menu mx26-change-menu" role="menu" aria-label={t('market.filterDock.change')}>
+                        {['all', 'gainers', 'losers'].map((v) => {
+                          const label = t(`market.filter.${v}`);
+                          return (
+                            <button
+                              key={v}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={changeViewLabel === label}
+                              className="mx26-option"
+                              onClick={() => { applyView(v); setChangeOpen(false); }}
+                            >
+                              <span>{label}</span>
+                              {changeViewLabel === label && <IconCheck width={12} height={12} aria-hidden="true" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mx26-field" data-field="sort" data-open={sortOpen ? 'true' : 'false'}>
+                    <span className="mx26-field-label">{t('market.filterDock.sort')}</span>
+                    <div className="market-sort-wrap mx-sort-wrap" ref={sortWrapRef}>
+                      <button
+                        type="button"
+                        className="market-sort-trigger mx-sort-trigger"
+                        aria-label={t('market.sortAria')}
+                        aria-haspopup="menu"
+                        aria-expanded={sortOpen}
+                        aria-controls="market-sort-options"
+                        onClick={() => { setSortOpen((open) => !open); setHorizonOpen(false); setChangeOpen(false); }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                            event.preventDefault();
+                            setSortOpen(true);
+                            requestAnimationFrame(() => sortWrapRef.current?.querySelector('.market-sort-option')?.focus());
+                          }
+                        }}
+                        data-testid="market-sort"
+                      >
+                        <span id="market-sort-current">{t(`market.sort.${sortKey}`)}</span>
+                        <GlyphCaretDown className="mx-sort-caret" width={13} height={13} />
+                      </button>
+                      {sortOpen && (
+                        <div
+                          className="market-sort-popover mx-sort-popover"
+                          id="market-sort-options"
+                          role="menu"
+                          aria-label={t('market.sortAria')}
+                          onKeyDown={(event) => {
+                            const options = [...event.currentTarget.querySelectorAll('.market-sort-option')];
+                            const index = options.indexOf(document.activeElement);
+                            let next = null;
+                            if (event.key === 'ArrowDown') next = (index + 1) % options.length;
+                            else if (event.key === 'ArrowUp') next = (index - 1 + options.length) % options.length;
+                            else if (event.key === 'Home') next = 0;
+                            else if (event.key === 'End') next = options.length - 1;
+                            if (next != null) { event.preventDefault(); options[next]?.focus(); }
+                          }}
+                        >
+                          {MARKET_SORTS.map((key) => (
+                            <button
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={sortKey === key}
+                              className="market-sort-option mx-sort-option"
+                              key={key}
+                              onClick={() => { chooseSort(key); setSortOpen(false); }}
+                            >
+                              <span>{t(`market.sort.${key}`)}</span>
+                              {sortKey === key && <IconCheck className="mx-sort-check" width={13} height={13} aria-hidden="true" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/*
+                        THE DIRECTION BUTTON, WHICH HAD NO STATE OF ITS OWN.
+                        The name states the ACTION, `aria-pressed` carries
+                        "descending is on", and `aria-describedby` points at
+                        the sort trigger's own text so the pair reads as
+                        «قیمت · نزولی» instead of as an arrow.
+                      */}
+                      <button
+                        type="button"
+                        className="market-dir mx-icon-btn"
+                        data-dir={sortDir}
+                        aria-pressed={sortDir === 'desc'}
+                        aria-label={sortDir === 'desc' ? t('market.dirToAsc') : t('market.dirToDesc')}
+                        aria-describedby="market-sort-current"
+                        onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                        data-testid="market-sort-dir"
+                      >
+                        {sortDir === 'desc'
+                          ? <GlyphSortDesc width={14} height={14} />
+                          : <GlyphSortAsc width={14} height={14} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/*
+                    «پایین ان فیلتر همه، صعودی و … کوچکتر و مینیمال» — the chips
+                    are the LAST row of this same box, below the three drop-downs.
+                    With no filter chosen they are ordinary flow and scroll away
+                    with the page; `data-active` is the only thing that can pin
+                    them, and it comes from the actual list constraints.
                 */}
                 <div
-                  className="mx-horizon"
-                  role="radiogroup"
-                  aria-label={t('market.horizonAria')}
-                  data-testid="market-horizon"
-                  onKeyDown={(event) => {
-                    const order = ['1h', '24h', '7d'];
-                    const i = order.indexOf(horizon);
-                    let next = null;
-                    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = order[(i + 1) % 3];
-                    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = order[(i + 2) % 3];
-                    if (next) { event.preventDefault(); setHorizon(next); }
-                  }}
+                  className="mx-controls mx26-chips"
+                  data-active={filtersActive ? 'true' : 'false'}
+                  data-testid="market-filter-chips"
                 >
-                  {['1h', '24h', '7d'].map((h) => (
-                    <button
-                      key={h}
-                      type="button"
-                      role="radio"
-                      aria-checked={horizon === h}
-                      tabIndex={horizon === h ? 0 : -1}
-                      className="mx-horizon-btn mono"
-                      data-horizon={h}
-                      data-active={horizon === h ? 'true' : undefined}
-                      onClick={() => setHorizon(h)}
-                      data-testid={`market-horizon-${h}`}
-                    >
-                      {t(`market.horizon.${h}`)}
-                    </button>
-                  ))}
-                  {/*
-                    AN HONEST NOTE, NOT A FOOTNOTE. The 1h and 7d columns do not
-                    exist on the CoinLore backup rows (that feed sends neither
-                    field), so a reader who switches to «۷ روز» while the
-                    primary feed is down would otherwise see a screen of «—»
-                    and conclude the market stopped moving. The sentence says
-                    which case this is.
-                  */}
-                  {horizon !== '24h' && (() => {
-                    const missing = list.filter((r) => (horizon === '1h' ? r.change1h : r.change7d) == null).length;
-                    if (!missing) return null;
-                    return (
-                      <span className="mx-horizon-note" data-testid="market-horizon-note">
-                        {t('market.horizonMissing', { count: fmtNum(missing) })}
-                      </span>
-                    );
-                  })()}
-                </div>
-
-                <div className="mx-controls">
-                <div className="market-views mx-views" role="group" aria-label={t('market.viewsAria')}>
-                  {FILTERS.map((f) => (
-                    <button
-                      key={f}
-                      type="button"
-                      className="market-view mx-view"
-                      data-view={f}
-                      data-active={activeView === f ? 'true' : undefined}
-                      aria-pressed={activeView === f}
-                      onClick={() => applyView(f)}
-                    >
-                      <FilterGlyph view={f} />
-                      {t(`market.filter.${f}`)}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="market-sort-wrap mx-sort-wrap" ref={sortWrapRef}>
-                  <button
-                    type="button"
-                    className="market-sort-trigger mx-sort-trigger"
-                    aria-label={t('market.sortAria')}
-                    aria-haspopup="menu"
-                    aria-expanded={sortOpen}
-                    aria-controls="market-sort-options"
-                    onClick={() => setSortOpen((open) => !open)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                        event.preventDefault();
-                        setSortOpen(true);
-                        requestAnimationFrame(() => sortWrapRef.current?.querySelector('.market-sort-option')?.focus());
-                      }
-                    }}
-                    data-testid="market-sort"
-                  >
-                    <span id="market-sort-current">{t(`market.sort.${sortKey}`)}</span>
-                    <GlyphCaretDown className="mx-sort-caret" width={13} height={13} />
-                  </button>
-                  {sortOpen && (
-                    <div
-                      className="market-sort-popover mx-sort-popover"
-                      id="market-sort-options"
-                      role="menu"
-                      aria-label={t('market.sortAria')}
-                      onKeyDown={(event) => {
-                        const options = [...event.currentTarget.querySelectorAll('.market-sort-option')];
-                        const index = options.indexOf(document.activeElement);
-                        let next = null;
-                        if (event.key === 'ArrowDown') next = (index + 1) % options.length;
-                        else if (event.key === 'ArrowUp') next = (index - 1 + options.length) % options.length;
-                        else if (event.key === 'Home') next = 0;
-                        else if (event.key === 'End') next = options.length - 1;
-                        if (next != null) { event.preventDefault(); options[next]?.focus(); }
-                      }}
-                    >
-                      {MARKET_SORTS.map((key) => (
-                        <button
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={sortKey === key}
-                          className="market-sort-option mx-sort-option"
-                          key={key}
-                          onClick={() => { chooseSort(key); setSortOpen(false); }}
-                        >
-                          <span>{t(`market.sort.${key}`)}</span>
-                          {sortKey === key && <IconCheck className="mx-sort-check" width={13} height={13} aria-hidden="true" />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {/*
-                    ─── THE DIRECTION BUTTON, WHICH HAD NO STATE OF ITS OWN ──
-                    Three problems, all of them accessibility bugs a sighted
-                    reader never sees because the arrow drawn inside the button
-                    was the entire signal:
-
-                      · its accessible name was the CURRENT direction
-                        («نزولی — بیش‌ترین اول»), not the ACTION, and a toggle
-                        whose name is a state is a coin toss for anyone using
-                        voice control: "click descending" could either mean
-                        "you are descending" or "make it descending";
-                      · it carried no `aria-pressed`, so the state existed only
-                        in the arrow's path data;
-                      · the direction is only half the answer — the other half
-                        is WHICH COLUMN, and that lives in the closed popover.
-
-                    So: the name now states the action, `aria-pressed` carries
-                    "descending is on", and `aria-describedby` points at the
-                    sort trigger's own text so the pair reads as «قیمت · نزولی»
-                    instead of as an arrow. `title` is removed rather than kept
-                    beside an identical accessible name — a title that repeats
-                    the label is a tooltip that says nothing.
-                  */}
-                  <button
-                    type="button"
-                    className="market-dir mx-icon-btn"
-                    data-dir={sortDir}
-                    aria-pressed={sortDir === 'desc'}
-                    aria-label={sortDir === 'desc' ? t('market.dirToAsc') : t('market.dirToDesc')}
-                    aria-describedby="market-sort-current"
-                    onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-                    data-testid="market-sort-dir"
-                  >
-                    {/* A drawn arrow, not a typed one: the down/up text glyphs arrive as artwork
-                        whose weight and baseline differ per platform. */}
-                    {sortDir === 'desc'
-                      ? <GlyphSortDesc width={14} height={14} />
-                      : <GlyphSortAsc width={14} height={14} />}
-                  </button>
-                </div>
+                  <div className="market-views mx-views" role="group" aria-label={t('market.viewsAria')}>
+                    {FILTERS.map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        className="market-view mx-view"
+                        data-view={f}
+                        data-active={activeView === f ? 'true' : undefined}
+                        aria-pressed={activeView === f}
+                        onClick={() => applyView(f)}
+                      >
+                        <FilterGlyph view={f} />
+                        {t(`market.filter.${f}`)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 </div>
 
@@ -1353,9 +1495,12 @@ export default function Market() {
                 </div>
               )}
 
-              {(canLoadNext || canLoadCategory || category.limitReached) && (
-                <p className="mx-category-note" data-testid="market-loaded-scope">{t('market.sortLoadedOnly')}</p>
-              )}
+              {/*
+                  «و این جملات هم پاک بشه» — the loaded-scope sentence used to
+                  sit here (and was hidden by a later sheet). It is removed at
+                  the source, in every locale, rather than display:none-d away:
+                  the «نمایش بیشتر» button below already says what it does.
+              */}
 
               {smartIntent && (
                 <div className="mx-intent-result" role="status" aria-live="polite">
