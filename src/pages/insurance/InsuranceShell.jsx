@@ -6,9 +6,8 @@ import { useWallet } from '../../context/WalletContext';
 import { insuranceApi } from '../../lib/insuranceClient.js';
 import { lockBodyScroll } from '../../lib/scrollLock.js';
 import { IconX } from '../../components/Icons.jsx';
-import { statusLabel } from './insStatus.js';
 import InsuranceExplain from './InsuranceExplain.jsx';
-import { InsIconShield, InsIconBell, InsIconWallet, InsIconChevronEnd, InsIconInfo, INS_TAB_ICONS } from './InsuranceIcons.jsx';
+import { InsIconShield, InsIconWallet, InsIconChevronEnd, INS_TAB_ICONS } from './InsuranceIcons.jsx';
 import './insurance.css';
 
 const TABS = [
@@ -20,9 +19,6 @@ const TABS = [
   { to: '/insurance/providers', key: 'insurance.tabs.providers', icon: 'providers' }
 ];
 
-/** Severity → chip class (token palette in insurance.css, both themes). */
-const SEV_CHIP = { HIGH: 'HIGH', MEDIUM: 'MEDIUM', INFO: 'INFO' };
-
 export default function InsuranceShell() {
   const { t } = useTranslation();
   const w = useWallet();
@@ -32,11 +28,6 @@ export default function InsuranceShell() {
   const connectedAddr = (w.isConnected ? w.address : '') || '';
   const [showWallet, setShowWallet] = useState(false); // wallet dialog (connected: manage/disconnect)
   const [serverOk, setServerOk] = useState(null); // null checking | true | false
-
-  // alerts
-  const [events, setEvents] = useState([]);
-  const [providers, setProviders] = useState([]);
-  const [sheet, setSheet] = useState(false);
 
   // toast + confirm modal
   const [toasts, setToasts] = useState([]);
@@ -57,12 +48,11 @@ export default function InsuranceShell() {
 
   // Lock body scroll and support Escape key dismiss when an overlay is open
   useEffect(() => {
-    if (!sheet && !showWallet && !confirmState) return undefined;
+    if (!showWallet && !confirmState) return undefined;
     const unlock = lockBodyScroll();
     const onKey = (e) => {
       if (e.key === 'Escape') {
-        if (sheet) setSheet(false);
-        else if (showWallet) setShowWallet(false);
+        if (showWallet) setShowWallet(false);
         else if (confirmState) settleConfirm(false);
       }
     };
@@ -71,31 +61,14 @@ export default function InsuranceShell() {
       unlock();
       window.removeEventListener('keydown', onKey);
     };
-  }, [sheet, showWallet, confirmState]);
+  }, [showWallet, confirmState]);
 
   // Server connectivity probe
   useEffect(() => {
     let alive = true;
     insuranceApi.capabilities().then(() => alive && setServerOk(true)).catch(() => alive && setServerOk(false));
-    insuranceApi.events(40).then((e) => alive && setEvents(Array.isArray(e) ? e : [])).catch(() => {});
-    insuranceApi.providers().then((p) => alive && setProviders(Array.isArray(p) ? p : [])).catch(() => {});
     return () => { alive = false; };
   }, []);
-
-  // Derived alerts. The sandbox notice appears ONLY while sandbox providers are
-  // actually registered (dev/test) — production never shows it.
-  const sandboxPresent = providers.some((p) => p.status === 'SANDBOX');
-  const livePresent = providers.some((p) => p.status === 'LIVE' && p.enabled);
-  const noLiveProvider = !sandboxPresent && !livePresent && serverOk === true;
-  const lowHealth = providers.filter((p) => p.healthStatus && p.healthStatus !== 'HEALTHY' && p.status !== 'SANDBOX');
-  const alerts = [
-    ...(serverOk === false ? [{ sev: 'HIGH', title: t('insurance.alerts.serverDownTitle'), body: t('insurance.alerts.serverDownBody') }] : []),
-    ...(!livePresent && !sandboxPresent && serverOk === true ? [{ sev: 'MEDIUM', title: t('insurance.alerts.noProviderTitle'), body: t('insurance.alerts.noProviderBody') }] : []),
-    ...(sandboxPresent ? [{ sev: 'INFO', title: t('insurance.alerts.sandboxTitle'), body: t('insurance.alerts.sandboxBody') }] : []),
-    ...(lowHealth.map((p) => ({ sev: p.healthStatus === 'DEGRADED' ? 'MEDIUM' : 'HIGH', title: t('insurance.alerts.healthTitle', { name: p.name, status: t(`insurance.status.${p.healthStatus}`, { defaultValue: p.healthStatus }) }), body: t('insurance.alerts.healthBody') }))),
-    ...(!connectedAddr ? [{ sev: 'INFO', title: t('insurance.alerts.noWalletTitle'), body: t('insurance.alerts.noWalletBody') }] : [])
-  ].slice(0, 8);
-  const unread = alerts.length;
 
   const chainLabel = w.chain?.short || w.chainId || '—';
 
@@ -173,10 +146,6 @@ export default function InsuranceShell() {
           <button className="ins-status-pill" onClick={() => setShowWallet(true)} title={t('insurance.shell.walletStatus')}>
             <span className={'ins-dot ' + (connectedAddr ? 'ok' : serverOk === false ? 'bad' : 'warn')} />
             <span>{connectedAddr ? `${chainLabel} · ${connectedAddr.slice(0, 6)}…${connectedAddr.slice(-4)}` : serverOk === false ? t('insurance.shell.apiOffline') : t('insurance.shell.notConnected')}</span>
-          </button>
-          <button className="ins-bell" onClick={() => setSheet(true)} aria-label={t('insurance.shell.alerts')}>
-            <InsIconBell />
-            {unread > 0 && <span className="count">{unread}</span>}
           </button>
         </div>
       </div>
@@ -264,73 +233,6 @@ export default function InsuranceShell() {
         document.body
       )}
 
-      {/* Alerts sheet */}
-      {sheet && typeof document !== 'undefined' && createPortal(
-        <div className="ins-sheet-portal">
-          <div
-            className="ins-modal-backdrop"
-            onClick={() => setSheet(false)}
-            aria-hidden="true"
-          />
-          <aside
-            className="ins-sheet"
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('insurance.shell.alerts')}
-          >
-            <div className="ins-sheet-head">
-              <div className="ins-sheet-head-title">
-                <span className="ins-sheet-head-ico" aria-hidden="true"><InsIconBell /></span>
-                <h3>{t('insurance.shell.alerts')}</h3>
-              </div>
-              <div className="ins-sheet-head-actions">
-                {/*
-                  One close control, not two: the header used to carry both a
-                  «بستن» text button and an ✕ icon doing the same thing. The
-                  icon stays (it matches the wallet and confirm dialogs); the
-                  text button is gone.
-                */}
-                <button
-                  type="button"
-                  className="ins-sheet-close"
-                  onClick={() => setSheet(false)}
-                  aria-label={t('insurance.common.close')}
-                  title={t('insurance.common.close')}
-                >
-                  <IconX width={18} height={18} />
-                </button>
-              </div>
-            </div>
-            <div className="ins-sheet-body">
-              {alerts.length === 0 && <div className="ins-ok neutral"><InsIconInfo /><span>{t('insurance.shell.noAlerts')}</span></div>}
-              {alerts.map((a, i) => (
-                <div className="ins-alert-item" key={i}>
-                  <span className={'ins-chip ' + (SEV_CHIP[a.sev] || 'INFO')}>{statusLabel(t, a.sev)}</span>
-                  <div style={{ minWidth: 0 }}>
-                    <b>{a.title}</b>
-                    <span className="body">{a.body}</span>
-                  </div>
-                </div>
-              ))}
-              {events.length > 0 && (
-                <>
-                  <div className="ins-sheet-section-title">
-                    <h3>{t('insurance.shell.recentEvents')}</h3>
-                  </div>
-                  {events.map((ev, i) => (
-                    <div className="ins-alert-item" key={i}>
-                      <span className="ins-event-time">{new Date(ev.at || ev.timestamp || Date.now()).toLocaleString()}</span>
-                      <div style={{ minWidth: 0 }}><span className="body" style={{ color: 'var(--text-1)' }}>{ev.type || ev.message}</span></div>
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-          </aside>
-        </div>,
-        document.body
-      )}
-
       {/* Confirm modal */}
       {confirmState && typeof document !== 'undefined' && createPortal(
         <div className="ins-modal-backdrop" onClick={() => settleConfirm(false)}>
@@ -367,8 +269,10 @@ export default function InsuranceShell() {
         document.body
       )}
 
-      {/* server health strip */}
-      <div className="ins-health">
+      {/* Server line — the exact bottom text the user asked for when the API
+          answers. Until the probe returns it says «در حال بررسی»; a real
+          offline state still says «آفلاین» instead of claiming a connection. */}
+      <div className="ins-health" data-testid="ins-server-line">
         <span className={'ins-dot ' + (serverOk === true ? 'ok' : serverOk === false ? 'bad' : 'warn')} />
         <span>{t('insurance.shell.server')}: {serverOk === null ? t('insurance.shell.checking') : serverOk === true ? t('insurance.shell.serverOnline') : t('insurance.shell.serverOffline')}</span>
       </div>

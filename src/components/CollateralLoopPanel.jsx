@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   LOOP_DEFAULTS,
   liquidationDropPct,
@@ -16,6 +17,7 @@ import LoopCalculator from './loop/LoopCalculator.jsx';
 import LoopPosition from './loop/LoopPosition.jsx';
 import { useLoopRun, LOOP_QUOTE_MAX_AGE_MS } from './loop/useLoopRun.js';
 import { formatFactor, formatMultiple, hfTone, tr } from './loop/loopFormat.js';
+import { lockBodyScroll } from '../lib/scrollLock.js';
 import '../styles/loan-loop.css';
 
 const OPEN_KEY = 'fbt.loan.loop.open';
@@ -113,7 +115,20 @@ export default function CollateralLoopPanel({
 }) {
   const bodyId = `loop-box-${useId().replace(/:/g, '')}`;
   const [open, setOpen] = useState(() => readOpen(Boolean(defaultOpen)));
+  const shellRef = useRef(null);
   const toggleOpen = () => setOpen((was) => { writeOpen(!was); return !was; });
+  const closeLoop = useCallback(() => { writeOpen(false); setOpen(false); }, []);
+
+  /* The expanded loop is a full-screen popup: the page behind it must not
+     scroll, Escape must dismiss it, and focus lands on the dialog container. */
+  useEffect(() => {
+    if (!open) return undefined;
+    const unlock = lockBodyScroll();
+    const onKey = (e) => { if (e.key === 'Escape') closeLoop(); };
+    window.addEventListener('keydown', onKey);
+    shellRef.current?.focus?.({ preventScroll: true });
+    return () => { unlock(); window.removeEventListener('keydown', onKey); };
+  }, [open, closeLoop]);
 
   /* ── manual calculator (Stage A) ─────────────────────────────────────── */
   const [input, setInput] = useState(() => ({ ...LOOP_DEFAULTS }));
@@ -259,8 +274,13 @@ export default function CollateralLoopPanel({
   const borrowSymbol = shownPlan?.market?.borrow?.symbol ?? null;
   const sameAsset = Boolean(shownPlan?.market?.sameAsset);
 
-  return (
+  const shell = (
     <section
+      ref={shellRef}
+      tabIndex={open ? -1 : undefined}
+      role={open ? 'dialog' : undefined}
+      aria-modal={open ? 'true' : undefined}
+      aria-label={open ? tr(t, 'loan.loop.title') : undefined}
       className={`loan-loop-shell loop-box${open ? ' is-open' : ''}${active ? ' is-running' : ''}`}
       data-testid="loan-collateral-loop"
       data-open={open ? 'true' : 'false'}
@@ -289,6 +309,19 @@ export default function CollateralLoopPanel({
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
         </span>
       </button>
+
+      {open && (
+        <button
+          type="button"
+          className="loop-box-close"
+          onClick={closeLoop}
+          data-testid="loop-box-close"
+          aria-label={t('common.close', { defaultValue: 'Close' })}
+          title={t('common.close', { defaultValue: 'Close' })}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      )}
 
       <div
         className="loop-box-body"
@@ -404,4 +437,17 @@ export default function CollateralLoopPanel({
       </div>
     </section>
   );
+
+  /* Expanded = full-screen popup. A portal keeps it out of every transformed
+     or clipped ancestor of the Loan page, so `inset: 0` really is the viewport. */
+  if (open && typeof document !== 'undefined') {
+    return createPortal(
+      <div className="loan-loop-portal">
+        <div className="loan-loop-backdrop" data-testid="loan-loop-backdrop" onClick={closeLoop} aria-hidden="true" />
+        {shell}
+      </div>,
+      document.body
+    );
+  }
+  return shell;
 }

@@ -15740,32 +15740,24 @@ button.settings-quick-action {
    `d` string draw a cherry instead of two overlapping discs, which is what the
    old accent set reduced to at 34px. */
 .farm-glyph-accent {
-  fill: rgba(255, 255, 255, 0.2);
-  stroke: rgba(255, 255, 255, 0.42);
-  stroke-width: 1.1;
+  fill: rgba(255, 255, 255, 0.3);
+  stroke: rgba(255, 255, 255, 0.62);
+  stroke-width: 1.15;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-.farm-glyph-letter {
-  fill: #ffffff;
-  font-family: var(--font-display, inherit);
-  font-weight: 800;
-  letter-spacing: -0.4px;
-  text-anchor: middle;
-  dominant-baseline: central;
-  paint-order: stroke fill;
-  stroke: rgba(6, 9, 20, 0.22);
-  stroke-width: 0.9px;
+  transform: scale(1.08);
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.28));
 }
 .farm-glyph-badge {
   position: absolute;
-  inset-block-end: -3px;
-  inset-inline-end: -3px;
+  inset-block-end: 1px;
+  inset-inline-end: 1px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   background: var(--bg-panel-solid, #0a0c12);
-  box-shadow: 0 0 0 1.5px var(--bg-panel-solid, #0a0c12);
+  box-shadow: 0 0 0 2px var(--bg-panel-solid, #0a0c12), 0 2px 5px rgba(0, 0, 0, 0.4);
 }
 .farm-glyph-coin {
   display: block;
@@ -15782,7 +15774,6 @@ button.settings-quick-action {
     inset 0 0 0 1px rgba(255, 255, 255, 0.34),
     0 6px 14px -10px rgba(15, 23, 42, 0.45);
 }
-:root[data-theme='light'] .farm-glyph-letter { stroke: rgba(255, 255, 255, 0.28); }
 :root[data-theme='light'] .farm-glyph-badge {
   background: #ffffff;
   box-shadow: 0 0 0 1.5px #ffffff, 0 2px 6px -3px rgba(15, 23, 42, 0.4);

@@ -45,7 +45,6 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn, stagger } from '../components/PageTransition';
 import CollateralLoopPanel from '../components/CollateralLoopPanel';
-import InfoBox from '../components/InfoBox';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import SolanaLendingPanel from '../components/SolanaLendingPanel';
 import AssetIcon from '../components/AssetIcon';
@@ -1807,10 +1806,6 @@ function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-      <motion.p variants={riseIn} className="prose-sm" style={{ lineHeight: 1.8, padding: '0 2px' }}>
-        {t('loan.supplyDesc')}
-      </motion.p>
-
       <OracleNote oracle={oracle} oracleStatus={oracleStatus} t={t} />
 
       <motion.div variants={riseIn}>
@@ -1886,17 +1881,6 @@ function SupplyTab({ market, t, haptic, notify, onExecute, preset }) {
         )}
       </AnimatePresence>
 
-      <motion.div variants={riseIn} style={{ marginTop: 4 }}>
-        <InfoBox title={t('loan.warningLiqTitle')} tone="warn" id="supply-liq-warn">
-          <p>{t('loan.warningLiqBody')}</p>
-        </InfoBox>
-        <InfoBox title={t('loan.warningScTitle')} tone="info" id="supply-sc-warn">
-          <p>{t('loan.warningScBody')}</p>
-        </InfoBox>
-        <InfoBox title={t('loan.archTitle')} tone="info" id="supply-arch">
-          <p>{t('loan.archBody')}</p>
-        </InfoBox>
-      </motion.div>
     </motion.div>
   );
 }
@@ -2274,17 +2258,6 @@ function BorrowTab({ market, t, haptic, notify, onExecute, preset }) {
         )}
       </AnimatePresence>
 
-      <motion.div variants={riseIn} style={{ marginTop: 4 }}>
-        <InfoBox title={t('loan.warningLiqTitle')} tone="danger" id="borrow-liq-warn">
-          <p>{t('loan.warningLiqBorrowBody')}</p>
-        </InfoBox>
-        <InfoBox title={t('loan.warningScTitle')} tone="warn" id="borrow-sc-warn">
-          <p>{t('loan.warningScBody')}</p>
-        </InfoBox>
-        <InfoBox title={t('loan.archTitle')} tone="info" id="borrow-arch">
-          <p>{t('loan.archBody')}</p>
-        </InfoBox>
-      </motion.div>
     </motion.div>
   );
 }
@@ -2504,11 +2477,6 @@ function PositionsTab({ market, t, haptic, notify, onExecute, onCollateral, hist
       {/* §27 — the ledger of what this wallet actually did on this page. */}
       <HistoryList history={history} market={market} t={t} />
 
-      <motion.div variants={riseIn} style={{ marginTop: 4 }}>
-        <InfoBox title={t('loan.archTitle')} tone="info" id="pos-arch">
-          <p>{t('loan.archBody')}</p>
-        </InfoBox>
-      </motion.div>
     </motion.div>
   );
 }
@@ -2745,6 +2713,46 @@ function HowItWorks({ t }) {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ONE CONSOLIDATED RISK WARNING
+   ---------------------------------------------------------------------------
+   The lend/borrow tabs used to end in three separate folded boxes (liquidation,
+   smart-contract risk, architecture) and the page then added a fourth danger
+   box under «چطور کار میکند». Four borders saying overlapping things is not
+   safety, it is noise. All four now live in ONE warning card directly under
+   «چطور کار میکند» — the position tab gets none of it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function LoanRiskNotice({ t }) {
+  const rows = [
+    { key: 'liq', title: t('loan.warningLiqTitle'), body: t('loan.warningLiqBorrowBody'), tone: 'danger' },
+    { key: 'sc', title: t('loan.warningScTitle'), body: t('loan.riskBody2'), tone: 'warn' },
+    { key: 'arch', title: t('loan.archTitle'), body: t('loan.archBody'), tone: 'info' },
+  ];
+  return (
+    <section className="loan-risk-notice" id="loan-risk-global" data-testid="loan-risk-global" role="note">
+      <div className="loan-risk-notice-head">
+        <span className="loan-risk-notice-icon" aria-hidden="true"><IconShield width={19} height={19} /></span>
+        <div className="loan-risk-notice-copy">
+          <h3>{t('loan.riskTitle')}</h3>
+          <p>{t('loan.riskBody')}</p>
+        </div>
+      </div>
+      <div className="loan-risk-notice-grid">
+        {rows.map((row) => (
+          <div key={row.key} className={`loan-risk-notice-row is-${row.tone}`}>
+            <span className="loan-risk-notice-dot" aria-hidden="true" />
+            <div>
+              <b>{row.title}</b>
+              <p>{row.body}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -3966,35 +3974,14 @@ export default function Loan() {
         data-testid="loan-rate-source"
         style={{ margin: '-6px 2px 10px' }}
       >
-        <p className="faint" style={{ fontSize: 10.5, margin: 0, lineHeight: 1.7 }}>
-          {venue
-            ? t('loan.rateSource', { chain: chainLabel(chain), at: readAt ? new Date(readAt).toLocaleTimeString() : '—' })
-            : t('loan.chainUnsupported', { chain: chainLabel(chain) })}
-        </p>
-        {venue && (
-          <div className="row-between" style={{ gap: 8, marginTop: 4 }}>
-            <UpdatedAgo at={readAt} t={t} />
-            {/*
-              ─── ONE «زنده از زنجیره» PER TAB, NOT TWO ──────────────────────
-              Reported: «زیر هر یه تب دوبار زنده از زنجیره هست؛ اولینش را پاک
-              کن، کلمش را زشت کرده.»
-
-              It was literally two: this pill, in the provenance line under the
-              tab rail, and then the SAME pill again inside every tab body,
-              beside the asset the numbers belong to. The word appeared twice
-              within two thumb-heights of itself, which reads as a rendering
-              bug rather than as an assurance — and the second one is the one
-              that carries information, because it sits next to the rate it is
-              describing.
-
-              So the duplicate here is gone and the rate-source line keeps the
-              part that is NOT repeated anywhere: which venue was read and how
-              long ago. The surviving pill lives in the tab body, next to the
-              asset the numbers describe, and keeps its own stable test id
-              (`loan-data-status`).
-            */}
-          </div>
+        {!venue && (
+          <p className="faint" style={{ fontSize: 10.5, margin: 0, lineHeight: 1.7 }}>
+            {t('loan.chainUnsupported', { chain: chainLabel(chain) })}
+          </p>
         )}
+        {/* The long «نرخها و موجودیها زنده … آخرین خواندن» sentence was removed
+            at the user's request. Only the honest unsupported-chain notice
+            remains here; the live-status pill lives in the tab body. */}
       </motion.div>}
 
       {/* ── Tab body ─────────────────────────────────────────────────────
@@ -4026,16 +4013,12 @@ export default function Loan() {
         )}
       </AnimatePresence>}
 
-      {chain !== SOLANA_LENDING_CHAIN_ID && <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 6 }}>
-        <HowItWorks t={t} />
-      </motion.div>}
-
-      {chain !== SOLANA_LENDING_CHAIN_ID && <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 2 }}>
-        <InfoBox title={t('loan.riskTitle')} tone="danger" id="loan-risk-global">
-          <p>{t('loan.riskBody')}</p>
-          <p style={{ marginTop: 6 }}>{t('loan.riskBody2')}</p>
-        </InfoBox>
-      </motion.div>}
+      {chain !== SOLANA_LENDING_CHAIN_ID && tab !== 'positions' && (
+        <motion.div variants={riseIn} initial="hidden" animate="show" style={{ marginTop: 6 }}>
+          <HowItWorks t={t} />
+          <LoanRiskNotice t={t} />
+        </motion.div>
+      )}
 
       <ExecutionSheet
         exec={exec}

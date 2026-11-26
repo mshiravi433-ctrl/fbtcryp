@@ -821,3 +821,80 @@
 :root[data-reduce-motion='true'] .loop-meter-fill { transition: none; }
 :root[data-reduce-motion='true'] .loop-chip-dot,
 :root[data-reduce-motion='true'] .loop-step.is-running .loop-step-node { animation: none !important; }
+
+/* ── expanded loop = full-screen popup ──────────────────────────────────── */
+.loan-loop-portal {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+.loan-loop-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 6, 14, 0.78);
+}
+.loan-loop-shell.loop-box.is-open {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  max-block-size: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: none;
+  overflow: hidden;
+}
+.loan-loop-shell.loop-box.is-open:focus { outline: none; }
+.loan-loop-shell.loop-box.is-open > .loop-box-head {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 3;
+  flex: 0 0 auto;
+  padding: 14px clamp(14px, 4vw, 42px);
+  background: var(--bg-panel-solid, #0a0c12);
+  border-block-end: 1px solid var(--loop-border);
+}
+.loan-loop-shell.loop-box.is-open .loop-box-body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  grid-template-rows: 1fr;
+}
+.loan-loop-shell.loop-box.is-open .loop-box-inner { min-block-size: 0; overflow: visible; }
+.loan-loop-shell.loop-box.is-open .loop-box-content {
+  inline-size: min(1080px, 100%);
+  margin-inline: auto;
+  padding: 18px clamp(14px, 4vw, 42px) 42px;
+  opacity: 1;
+  transform: none;
+}
+.loop-box-close {
+  position: absolute;
+  z-index: 4;
+  inset-block-start: 14px;
+  inset-inline-end: clamp(10px, 3vw, 34px);
+  inline-size: 38px;
+  block-size: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--loop-border);
+  background: var(--loop-surface-2);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: background .18s ease, transform .18s ease;
+}
+.loop-box-close:hover { background: color-mix(in srgb, var(--loop-danger) 22%, transparent); transform: scale(1.04); }
+.loop-box-close:focus-visible { outline: 2px solid var(--loop-accent); outline-offset: 2px; }
+/* The header chevron duplicated the close affordance in full-screen mode. */
+.loan-loop-shell.loop-box.is-open .loop-box-chev { display: none; }
+.loan-loop-shell.loop-box.is-open .loop-box-chips { max-inline-size: none; margin-inline-end: 46px; }
+@media (max-width: 640px) {
+  .loan-loop-shell.loop-box.is-open > .loop-box-head { padding-inline: 56px 14px; }
+  .loan-loop-shell.loop-box.is-open .loop-box-chips { margin-inline-end: 0; }
+  .loop-box-close { inset-block-start: 18px; inset-inline-end: 12px; }
+}

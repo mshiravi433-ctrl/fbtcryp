@@ -51,7 +51,15 @@ vi.mock('../../src/lib/insuranceClient.js', () => ({
     products: async (chainId) => (Number(chainId) === 1 ? PRODUCTS_1 : []),
     quote: async (body) => { calls.quote.push(body); return body.productId ? { ok: true, data: { quotes: [{ quoteId: 'q-1', provider: 'nexus-mutual', providerName: 'Nexus Mutual', providerHealth: 'HEALTHY', productId: body.productId, product: { id: body.productId, name: 'Aave v3' }, protectionType: body.protectionType, durationDays: body.durationDays, coverageAmountMicro: '10000000000', premiumUsd: '12.00', fbtFeeUsd: '0.12', totalCostUsd: '12.12', settlementModel: 'DIRECT', claimMethod: 'nexus-assessment', termsHash: 'abcdef1234567890abcdef1234567890', quoteSource: 'provider-api', sandbox: false }] }, warnings: [] } : { ok: false, errors: [{ code: 'NO_ELIGIBLE_PROTECTION' }], warnings: ['LIVE_QUOTE_NOT_AVAILABLE'], data: { detail: [{ providerId: 'nexus-mutual', reason: 'PRODUCT_REQUIRED' }] } }; },
     capabilities: async () => ({ ok: true }), events: async () => [], coverage: async () => ({ summary: { totalProtectedUsd: '0', activeCovers: 0, totalPremiumUsd: '0', active: [] }, coverages: [] }),
-    claims: async () => ({ claims: [] }), quoteById: async () => ({ ok: true, data: { quote: { quoteId: 'q-1', protectionType: 'lending', product: { name: 'Aave v3' }, coverageAmountMicro: '10000000000', durationDays: 28, premiumUsd: '12', fbtFeeUsd: '0.12', fbtFeeMicro: '120000', networkFeeUsd: '0', totalCostUsd: '12.12', providerName: 'Nexus Mutual', currency: 'usdc', claimMethod: 'nexus-assessment', quoteSource: 'provider-api', exclusions: ['x'], termsUrl: 'https://t', annexUrl: 'https://a', chainId: 1 } } })
+    claims: async () => ({ claims: [] }),
+    protectPortfolio: async () => ({ ok: true, data: {
+      coverageGap: { eligibleExposureUsd: '5000', activeCoverageUsd: '0', coverageGapUsd: '5000' },
+      riskAnalysis: { overallRiskBand: 'MEDIUM', kinds: [] },
+      recommendations: [{ riskKind: 'lending', protectionType: 'lending', recommendedCoverageMicro: '5000000000', catalogueOnly: true, best: null,
+        catalogue: [{ productId: 'nexus-97', providerId: 'nexus-mutual', providerName: 'Nexus Mutual', name: 'Aave v3', chainId: 1 }] }],
+      autoExecute: false
+    } }),
+    quoteById: async () => ({ ok: true, data: { quote: { quoteId: 'q-1', protectionType: 'lending', product: { name: 'Aave v3' }, coverageAmountMicro: '10000000000', durationDays: 28, premiumUsd: '12', fbtFeeUsd: '0.12', fbtFeeMicro: '120000', networkFeeUsd: '0', totalCostUsd: '12.12', providerName: 'Nexus Mutual', currency: 'usdc', claimMethod: 'nexus-assessment', quoteSource: 'provider-api', exclusions: ['x'], termsUrl: 'https://t', annexUrl: 'https://a', chainId: 1 } } })
   }
 }));
 vi.mock('../../src/context/WalletContext', () => ({ useWallet: () => ({ isConnected: true, address: '0x1111111111111111111111111111111111111111', chainId: 1, chain: { short: 'ETH' }, disconnect: () => {}, switchChain: async () => true, getEip1193Provider: () => null, getSigner: () => null, mode: 'injected' }) }));
@@ -122,6 +130,7 @@ describe('marketplace: select product → quote with productId', () => {
     expect(container.querySelector('a[href="https://app.nexusmutual.io/cover/product/97/annex"]')).toBeTruthy();
     expect(container.querySelector('a[href="https://app.nexusmutual.io/cover/product/97/cover-wording"]')).toBeTruthy();
     expect(cta.disabled).toBe(false);
+    fireEvent.click(container.querySelector('.ins-terms input'));
     fireEvent.click(cta);
     await waitFor(() => expect(calls.quote.length).toBe(1));
     expect(calls.quote[0].productId).toBe('nexus-97');
@@ -149,6 +158,7 @@ describe('marketplace: select product → quote with productId', () => {
     calls.quote.length = 0;
     const { container } = mount('/insurance/marketplace?type=lending&chain=56');
     await waitFor(() => expect(container.textContent).toContain('برای این شبکه محصولی موجود نیست'));
+    fireEvent.click(container.querySelector('.ins-terms input'));
     fireEvent.click(container.querySelector('button.ins-cta'));
     await waitFor(() => expect(container.textContent).toContain('ابتدا پروتکل مورد بیمه را انتخاب کنید'));
   });
@@ -168,52 +178,24 @@ describe('shell tab rail', () => {
   });
 });
 
-describe('insurance alerts notification sheet & modal overlays', () => {
-  it('opens alerts sheet via bell, renders in body portal, and closes via X button', async () => {
+describe('insurance shell chrome', () => {
+  it('shows only «محافظت» in the header, no notification bell, and the connected server line', async () => {
     const { container } = mount('/insurance');
-    await waitFor(() => expect(container.querySelector('.ins-bell')).toBeTruthy());
-    const bell = container.querySelector('.ins-bell');
-
-    // Click bell to open alerts sheet
-    fireEvent.click(bell);
-    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeTruthy());
-
-    const sheetEl = document.body.querySelector('.ins-sheet');
-    expect(sheetEl).toBeTruthy();
-    // Verify portal: rendered directly inside document.body (under .ins-sheet-portal), outside the page container
-    expect(container.querySelector('.ins-sheet')).toBeFalsy();
-
-    // Verify header has close cross icon (IconX) and text button
-    const closeBtn = sheetEl.querySelector('.ins-sheet-close');
-    expect(closeBtn).toBeTruthy();
-    expect(closeBtn.querySelector('svg')).toBeTruthy();
-    const textCloseBtn = sheetEl.querySelector('.ins-sheet-close-text');
-    expect(textCloseBtn).toBeTruthy();
-
-    // Click the X close button
-    fireEvent.click(closeBtn);
-    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeFalsy());
+    await waitFor(() => expect(container.querySelector('[data-testid="ins-server-line"]')).toBeTruthy());
+    expect(container.querySelector('.ins-brand-name').textContent).toBe('محافظت');
+    expect(container.querySelector('.ins-bell')).toBeNull();
+    await waitFor(() => expect(container.querySelector('[data-testid="ins-server-line"]').textContent).toContain('متصل · آنلاین'));
   });
+});
 
-  it('closes alerts sheet via backdrop click', async () => {
-    const { container } = mount('/insurance');
-    await waitFor(() => expect(container.querySelector('.ins-bell')).toBeTruthy());
-    fireEvent.click(container.querySelector('.ins-bell'));
-    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeTruthy());
-
-    const backdrop = document.body.querySelector('.ins-modal-backdrop');
-    expect(backdrop).toBeTruthy();
-    fireEvent.click(backdrop);
-    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeFalsy());
-  });
-
-  it('closes alerts sheet via Escape key', async () => {
-    const { container } = mount('/insurance');
-    await waitFor(() => expect(container.querySelector('.ins-bell')).toBeTruthy());
-    fireEvent.click(container.querySelector('.ins-bell'));
-    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeTruthy());
-
-    fireEvent.keyDown(window, { key: 'Escape' });
-    await waitFor(() => expect(document.body.querySelector('.ins-sheet')).toBeFalsy());
+describe('risk tab: priced quotes are not the only way to work', () => {
+  it('shows real catalogue options when the provider returned no quote', async () => {
+    const { container } = mount('/insurance/risk');
+    const analyse = [...container.querySelectorAll('button.ins-cta')][0];
+    fireEvent.click(analyse);
+    await waitFor(() => expect(container.querySelector('[data-testid="ins-risk-catalogue"]')).toBeTruthy());
+    expect(container.textContent).toContain('Aave v3');
+    expect(container.textContent).not.toContain('حال حاضر برای این حساسیتها گزینهای موجود نیست');
+    expect(container.querySelector('a[href*="/insurance/marketplace?type=lending"]')).toBeTruthy();
   });
 });

@@ -252,7 +252,6 @@
     },
     "smartMoneyUnavailable": "بيانات الأموال الذكية على السلسلة غير متاحة لهذا الأصل.",
     "pro": {
-
       "open": "رسم بياني بملء الشاشة",
       "close": "إغلاق الرسم",
       "dialog": "رسم {{symbol}} البياني بملء الشاشة",
@@ -357,7 +356,6 @@
       "categories": "التصنيفات",
       "networks": "الشبكات",
       "whitepaper": "الورقة البيضاء",
-
       "identity": "التعريف",
       "snapshot": "لمحة عن {{name}}: تاريخ السوق والعرض والنشاط.",
       "readDescription": "وصف المشروع",
@@ -9320,7 +9318,7 @@
       "done": "تم"
     },
     "shell": {
-      "brand": "حماية FBT",
+      "brand": "حماية",
       "walletStatus": "حالة المحفظة/الخادم",
       "apiOffline": "واجهة غير متصلة",
       "notConnected": "غير متصل",
@@ -9535,7 +9533,8 @@
     },
     "claims": {
       "created": "تم إنشاء المطالبة {{number}} ({{status}}). قدّمها الآن.",
-      "createdToast": "تم إنشاء المطالبة {{number}}"
+      "createdToast": "تم إنشاء المطالبة {{number}}",
+      "downloadReport": "تنزيل التقرير"
     },
     "providerUnavailable": "المزود غير متاح مؤقتًا",
     "unknown": "غير معروف",

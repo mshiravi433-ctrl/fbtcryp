@@ -525,8 +525,6 @@
       "categories": "Catégories",
       "networks": "Réseaux",
       "whitepaper": "Livre blanc",
-
-
       "identity": "Identité",
       "snapshot": "Aperçu de {{name}} : historique du marché, offre et activité.",
       "readDescription": "Description du projet",
@@ -3317,7 +3315,7 @@
       "done": "Terminé"
     },
     "shell": {
-      "brand": "Protection FBT",
+      "brand": "Protection",
       "walletStatus": "Statut portefeuille/serveur",
       "apiOffline": "API hors ligne",
       "notConnected": "Non connecté",
@@ -3524,7 +3522,8 @@
     },
     "claims": {
       "created": "Réclamation {{number}} créée ({{status}}). Soumettez-la maintenant.",
-      "createdToast": "Réclamation {{number}} créée"
+      "createdToast": "Réclamation {{number}} créée",
+      "downloadReport": "Télécharger le rapport"
     },
     "providerUnavailable": "Fournisseur temporairement indisponible",
     "unknown": "Inconnu",

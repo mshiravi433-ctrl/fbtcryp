@@ -439,3 +439,69 @@
   .loan-risk-grid { grid-template-columns: 1fr; }
   .loan-icon-btn { width: 34px; height: 34px; border-radius: 11px; }
 }
+
+/* ── one consolidated warning under «چطور کار میکند» ─────────────────────── */
+.loan-risk-notice {
+  --notice: #fbbf24;
+  position: relative;
+  margin-top: 10px;
+  padding: 15px 15px 13px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--notice) 34%, transparent);
+  background:
+    radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--notice) 14%, transparent), transparent 62%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+.loan-risk-notice::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--notice), color-mix(in srgb, var(--notice) 30%, transparent));
+}
+.loan-risk-notice-head { display: flex; align-items: flex-start; gap: 11px; }
+.loan-risk-notice-icon {
+  flex: 0 0 auto;
+  inline-size: 36px;
+  block-size: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #1b1303;
+  background: linear-gradient(145deg, #fde68a, #f59e0b);
+  box-shadow: 0 8px 18px -9px rgba(245, 158, 11, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.loan-risk-notice-copy { min-inline-size: 0; }
+.loan-risk-notice-copy h3 { margin: 0 0 4px; font-size: 13.5px; font-weight: 850; color: var(--text-1); }
+.loan-risk-notice-copy p { margin: 0; font-size: 11.5px; line-height: 1.65; color: var(--text-2); }
+.loan-risk-notice-grid { display: grid; gap: 8px; margin-top: 12px; }
+.loan-risk-notice-row {
+  --row: #fbbf24;
+  display: flex;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border-inline-start: 2px solid color-mix(in srgb, var(--row) 60%, transparent);
+}
+.loan-risk-notice-row.is-danger { --row: #f87171; }
+.loan-risk-notice-row.is-info { --row: #60a5fa; }
+.loan-risk-notice-dot {
+  flex: 0 0 auto;
+  inline-size: 7px;
+  block-size: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--row);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--row) 16%, transparent);
+}
+.loan-risk-notice-row b { display: block; font-size: 11.5px; font-weight: 800; color: var(--text-1); }
+.loan-risk-notice-row p { margin: 3px 0 0; font-size: 11px; line-height: 1.65; color: var(--text-2); }
+:root[data-theme='light'] .loan-risk-notice {
+  background: linear-gradient(155deg, #fffaf0, #ffffff);
+  box-shadow: 0 10px 28px -18px rgba(120, 70, 0, 0.55);
+}
+:root[data-theme='light'] .loan-risk-notice-row { background: rgba(120, 70, 0, 0.045); }

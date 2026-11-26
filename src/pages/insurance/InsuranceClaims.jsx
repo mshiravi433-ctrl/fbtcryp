@@ -24,6 +24,7 @@ export default function InsuranceClaims() {
   const loc = useLocation();
   const initialCoverage = loc.state?.coverageId || '';
   const [claims, setClaims] = useState([]);
+  const [coverages, setCoverages] = useState([]);
   const [coverageId, setCoverageId] = useState(initialCoverage);
   const [incidentType, setIncidentType] = useState('smart-contract-exploit');
   const [amount, setAmount] = useState('');
@@ -32,7 +33,25 @@ export default function InsuranceClaims() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { if (wallet) insuranceApi.claims(wallet).then((d) => setClaims(d.claims || [])).catch(() => {}); }, [wallet]);
+  useEffect(() => {
+    if (!wallet) return;
+    let alive = true;
+    /* The report list AND the coverages it can report on both have to load.
+       The old `.catch(() => {})` hid a failed read as an empty page and left
+       the coverage field a blind text box — hence «گزارشها کار نمیکنند». */
+    insuranceApi.claims(wallet)
+      .then((d) => { if (alive) setClaims(d.claims || []); })
+      .catch((e) => { if (alive) { const m = insuranceError(e, t); setErr(m); } });
+    insuranceApi.coverage(wallet)
+      .then((d) => {
+        if (!alive) return;
+        const rows = (d.coverages || []).filter((c) => c.status === 'ACTIVE');
+        setCoverages(rows);
+        if (!coverageId && rows.length === 1) setCoverageId(rows[0].coverageId);
+      })
+      .catch(() => { if (alive) setCoverages([]); });
+    return () => { alive = false; };
+  }, [wallet]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function create() {
     setErr(''); setMsg(''); setBusy(true);
@@ -48,6 +67,19 @@ export default function InsuranceClaims() {
       const d = await insuranceApi.claims(wallet); setClaims(d.claims || []);
     } catch (e) { const m = insuranceError(e, t); setErr(m); notify(m.text || t('insurance.claims.failed'), 'error'); }
     setBusy(false);
+  }
+
+  function downloadReport(claim) {
+    const blob = new Blob([JSON.stringify(claim, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${claim.claimNumber || claim.claimId || 'claim'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    /* Give the browser a tick to start the download before releasing the URL. */
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   async function submit(claimId) {
@@ -92,7 +124,23 @@ export default function InsuranceClaims() {
         <div className="ins-card-title"><span className="ins-ico"><InsIconClaim /></span>{t('insurance.claims.fileTitle')}</div>
         <div className="ins-field">
           <div className="ins-label"><span>{t('insurance.claims.coverageId')}</span></div>
-          <input className="ins-input" value={coverageId} onChange={(e) => setCoverageId(e.target.value)} placeholder="cov-…" aria-label={t('insurance.claims.coverageId')} />
+          {coverages.length > 0 ? (
+            <ModernSelect
+              value={coverageId}
+              onChange={(v) => setCoverageId(String(v))}
+              options={coverages.map((c) => ({
+                value: c.coverageId,
+                label: c.coverageId,
+                sublabel: [c.providerName, c.protectionType, `$${usd(c.coverageAmountMicro || '0')}`].filter(Boolean).join(' · ')
+              }))}
+              title={t('insurance.claims.coverageId')}
+              placeholder={t('insurance.claims.coverageId')}
+              searchable={false}
+              compact
+            />
+          ) : (
+            <input className="ins-input" value={coverageId} onChange={(e) => setCoverageId(e.target.value)} placeholder="cov-…" aria-label={t('insurance.claims.coverageId')} />
+          )}
         </div>
         <div className="ins-field-row">
           <div className="ins-field">
@@ -137,6 +185,11 @@ export default function InsuranceClaims() {
           <div className="ins-row"><span>{t('insurance.claims.approved')}</span><span>${c.approvedPayoutUsd ?? '—'}</span></div>
           <div className="ins-row"><span>{t('insurance.claims.paid')}</span><span>${c.payoutUsd ?? '—'}</span></div>
           <div className="ins-row"><span>{t('insurance.claims.evidence')}</span><code>{c.evidenceHash?.slice(0, 20)}…</code></div>
+          <div style={{ marginTop: 10 }}>
+            <button type="button" className="ins-btn ghost small" data-testid="ins-download-report" onClick={() => downloadReport(c)}>
+              {t('insurance.claims.downloadReport')}
+            </button>
+          </div>
           <div className="ins-label" style={{ marginTop: 10 }}><span>{t('insurance.claims.timeline')}</span></div>
           <ol className="ins-steps">
             {(c.timeline || []).map((tl, i) => (

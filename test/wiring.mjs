@@ -668,8 +668,15 @@ export default function run() {
       /function hashHue/.test(marks) && /hashHue\(key\)/.test(marks) && /function guessAccent/.test(marks));
     t('the glyph is generated offline and never an empty box',
       !/https?:\/\/[^'"]*\.(?:png|svg|ico)/.test(glyph)
-      && /mark\.letter/.test(glyph)
+      && /KIND_ACCENTS\[mark\.accent\]/.test(glyph)
       && /aria-hidden="true"/.test(glyph));
+    t('the pool card shows the tropical fruit, never an English initial',
+      !/<text\b/.test(glyph) && !/farm-glyph-letter/.test(glyph)
+      && !/\.farm-glyph-letter/.test(read('src/index.css')));
+    t('the network badge sits fully inside the tile',
+      /inset-block-end: 1px/.test(read('src/index.css'))
+      && /inset-inline-end: 1px/.test(read('src/index.css'))
+      && /Math\.round\(size \* 0\.38\)/.test(glyph));
     t('the glyph tile and its badge are legible in the light theme too',
       /:root\[data-theme='light'\] \.farm-glyph\s*\{[\s\S]*?box-shadow/.test(read('src/index.css')));
 

@@ -528,8 +528,6 @@
       "categories": "زمرے",
       "networks": "نیٹ ورکس",
       "whitepaper": "وائٹ پیپر",
-
-
       "identity": "تعارف",
       "snapshot": "{{name}} کا جائزہ: مارکیٹ کی تاریخ، رسد اور سرگرمی۔",
       "readDescription": "منصوبے کی تفصیل",
@@ -3313,7 +3311,7 @@
       "done": "Done"
     },
     "shell": {
-      "brand": "FBT Protection",
+      "brand": "تحفظ",
       "walletStatus": "Wallet / server status",
       "apiOffline": "API offline",
       "notConnected": "Not connected",
@@ -3520,7 +3518,8 @@
     },
     "claims": {
       "created": "Claim {{number}} created ({{status}}). Now submit it.",
-      "createdToast": "Claim {{number}} created"
+      "createdToast": "Claim {{number}} created",
+      "downloadReport": "رپورٹ ڈاؤن لوڈ کریں"
     },
     "providerUnavailable": "Provider temporarily unavailable",
     "unknown": "Unknown",
