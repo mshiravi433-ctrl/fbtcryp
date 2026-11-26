@@ -8,7 +8,7 @@
  */
 import * as store from './store.js';
 import { analysePortfolioRisk, coverageGap } from './risk-engine.js';
-import { aggregateQuotes, listProviders } from './service.js';
+import { aggregateQuotes, discoverProducts, listProviders } from './service.js';
 import { toMicro, fromMicro, CHAIN_IDS, RISK_BANDS } from './constants.js';
 import { listCoverages } from './coverage.js';
 
@@ -41,7 +41,10 @@ export async function protectPortfolio(input) {
   const gap = coverageGap(risk);
 
   // Prioritise uncovered kinds by gap amount.
-  const open = risk.kinds.filter((k) => k.gapMicro > 0n).sort((a, b) => (b.gapMicro > a.gapMicro ? 1 : -1));
+  // Biggest uncovered exposure first. The old comparator returned 1 when b
+  // was LARGER, so it silently sorted the smallest gap to the top and the
+  // recommendation list answered the wrong question.
+  const open = risk.kinds.filter((k) => k.gapMicro > 0n).sort((a, b) => (a.gapMicro > b.gapMicro ? -1 : a.gapMicro < b.gapMicro ? 1 : 0));
 
   // Decide target allocations: if a global target is given, split proportionally
   // across open kinds by their gap; otherwise recommend closing each gap.
@@ -57,12 +60,33 @@ export async function protectPortfolio(input) {
   }
 
   const options = [];
+  let catalogue = null;
   for (const t of targets) {
     const res = await aggregateQuotes({
       walletAddress: owner, chainId, protectionType: t.protectionType,
       coverageAmountMicro: t.recommendedCoverageMicro, durationDays, currency: 'usdc'
     });
-    if (!res.ok) continue;
+    if (!res.ok) {
+      /* A priced quote needs the buyer's wallet, terms acceptance and a live
+         provider answer. A RECOMMENDATION does not: when those inputs are not
+         there, show the REAL catalogue entries for this protection kind and
+         send the user to the marketplace with the product preselected. No
+         premium, quote id or provider claim is invented. */
+      catalogue ??= (await discoverProducts({ chainId }).catch(() => [])) || [];
+      const matches = catalogue
+        .filter((p) => p.kind === t.protectionType && (!chainId || (p.supportedChains || []).includes(chainId)))
+        .slice(0, 4)
+        .map((p) => ({
+          productId: p.id,
+          providerId: p.providerId,
+          providerName: p.providerName,
+          name: p.name || p.label || p.id,
+          chainId,
+          termsUrl: p.termsUrl || null
+        }));
+      if (matches.length) options.push({ ...t, best: null, catalogueOnly: true, catalogue: matches });
+      continue;
+    }
     const ranked = rankQuotes(res.quotes);
     if (ranked.length === 0) continue;
     const best = ranked[0];
@@ -82,7 +106,9 @@ export async function protectPortfolio(input) {
     riskAnalysis: { overallRiskBand: risk.overallRiskBand, totalExposureUsd: risk.totalExposureUsd, kinds: risk.kinds },
     coverageGap: gap,
     recommendations: options,
-    recommendation: options.length ? `Review the ${options.length} recommended protection option(s). Nothing is purchased without your signature.` : gap.coverageGapUsd !== '0' ? 'Coverage gap detected but no eligible protection is currently available.' : 'No coverage gap detected.',
+    recommendation: options.some((o) => o.catalogueOnly)
+      ? `Real catalogue options were found for ${options.length} uncovered exposure(s); request a live quote in the marketplace before any purchase.`
+      : options.length ? `Review the ${options.length} recommended protection option(s). Nothing is purchased without your signature.` : gap.coverageGapUsd !== '0' ? 'Coverage gap detected but no eligible protection is currently available.' : 'No coverage gap detected.',
     plainLanguage,
     disclaimers: ['Sandbox protection providers are simulated. Nothing is guaranteed.', 'This is a recommendation only. No coverage is purchased automatically.'],
     expiresAt: Date.now() + 15 * 60 * 1000
@@ -125,7 +151,9 @@ function explain(risk, options) {
   for (const k of risk.kinds.filter((x) => x.gapUsd !== '0').slice(0, 3)) {
     lines.push(`${k.label}: ${k.riskBand.toLowerCase()} risk, ${k.gapUsd} uncovered.`);
   }
-  if (options.length) {
+  if (options.some((o) => o.catalogueOnly)) {
+    lines.push('Live protection options exist for the open exposure, but a price could not be quoted without a wallet, accepted terms or a provider answer. Review the real provider catalogue and request a live quote in the marketplace.');
+  } else if (options.length) {
     lines.push('Recommended protection has been quoted. Review terms, exclusions and every fee before signing — the maximum eligible payout per certificate is what you select.');
   } else {
     lines.push('No eligible protection is currently available for the open exposure.');

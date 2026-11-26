@@ -6,7 +6,7 @@ import { statusLabel } from './insStatus.js';
 import { insuranceError } from './insErrors.js';
 import InsAlert from './InsAlert.jsx';
 import ModernSelect from '../../components/ModernSelect.jsx';
-import { InsIconRisk, InsIconWallet, InsIconChevronEnd, InsIconAlert, InsIconInfo, InsIconCheck, InsIconShield, InsIconSearch, INS_TYPE_ICONS } from './InsuranceIcons.jsx';
+import { InsIconRisk, InsIconChevronEnd, InsIconAlert, InsIconInfo, InsIconCheck, InsIconShield, InsIconSearch, INS_TYPE_ICONS } from './InsuranceIcons.jsx';
 
 /** exposure kind (server risk engine id) -> marketplace protection type id */
 const KIND_TYPE = {
@@ -47,20 +47,6 @@ export default function InsuranceRisk() {
   const riskAnalysis = result?.riskAnalysis || {};
   const openKinds = (riskAnalysis?.kinds || []).filter((k) => String(k?.gapUsd !== undefined ? k.gapUsd : '0') !== '0').slice(0, 3);
 
-  if (!wallet) {
-    return (
-      <div className="ins-tone-amber">
-        <div className="ins-title">{t('insurance.risk.title')}</div>
-        <div className="ins-state-card ins-state-card--sm ins-tone-magenta">
-          <div className="ins-ico lg"><InsIconWallet /></div>
-          <h2>{t('insurance.shell.walletRequiredTitle')}</h2>
-          <p>{t('insurance.shell.walletRequiredBody')}</p>
-          <div className="ins-state-actions"><Link className="ins-btn" to="/wallet">{t('insurance.shell.goWallet')} <InsIconChevronEnd /></Link></div>
-        </div>
-      </div>
-    );
-  }
-
   const kindOptions = KIND_KEYS.map((k) => {
     const Glyph = INS_TYPE_ICONS[KIND_TYPE[k]] || InsIconShield;
     return { value: k, label: kindName(k), iconNode: <span className="ins-ico sm"><Glyph /></span> };
@@ -78,6 +64,7 @@ export default function InsuranceRisk() {
 
       <div className="ins-card ins-form-card">
         <div className="ins-card-title"><span className="ins-ico"><InsIconSearch /></span>{t('insurance.risk.exposures')}</div>
+        {!wallet && <p className="ins-hint">{t('insurance.market.needWallet')}</p>}
         {rows.map((r, i) => (
           <div key={i} className="ins-risk-row">
             <ModernSelect value={r.kind} onChange={(v) => setRow(i, 'kind', String(v))} options={kindOptions} title={t('insurance.risk.kindAria')} placeholder={t('insurance.risk.kindAria')} searchable={false} compact />
@@ -127,7 +114,23 @@ export default function InsuranceRisk() {
                   <span className="ins-tag tone">{t('insurance.risk.recTag')}</span>
                 </div>
                 <div className="ins-row"><span>{t('insurance.risk.recommendedCoverage')}</span><b>${usd(r.recommendedCoverageMicro)}</b></div>
-                {r.best ? (
+                {r.catalogueOnly ? (
+                  <>
+                    <div className="ins-muted">{t('insurance.risk.quoteUnavailable')}</div>
+                    <div className="ins-risk-catalogue" data-testid="ins-risk-catalogue">
+                      {(r.catalogue || []).map((p) => (
+                        <Link
+                          key={`${p.providerId}-${p.productId}`}
+                          className="ins-risk-catalogue-item"
+                          to={`/insurance/marketplace?type=${encodeURIComponent(r.protectionType)}&chain=${Number(p.chainId) || 1}&product=${encodeURIComponent(p.productId)}`}
+                        >
+                          <span><b>{p.name}</b><small>{p.providerName}</small></span>
+                          <span className="ins-link">{t('insurance.coverage.goMarket')} <InsIconChevronEnd /></span>
+                        </Link>
+                      ))}
+                    </div>
+                  </>
+                ) : r.best ? (
                   <>
                     <div className="ins-row"><span>{t('insurance.risk.bestProvider')}</span><span>{r.best.providerName}</span></div>
                     <div className="ins-row"><span>{t('insurance.fee.providerPremium')}</span><span>${r.best.premiumUsd}</span></div>

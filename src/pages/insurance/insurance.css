@@ -1680,3 +1680,23 @@
   overflow: hidden;
   overflow-wrap: anywhere;
 }
+
+/* Real catalogue options shown when a priced quote cannot be produced. */
+.ins-risk-catalogue { display: grid; gap: 7px; margin-top: 9px; }
+.ins-risk-catalogue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--ins-ink, var(--ink-amber, #fbbf24)) 26%, var(--line));
+  background: var(--ins-well);
+  color: var(--text-1);
+  text-decoration: none;
+  transition: border-color .18s ease, transform .18s ease;
+}
+.ins-risk-catalogue-item:hover { border-color: var(--ins-ink, var(--ink-amber, #fbbf24)); transform: translateY(-1px); }
+.ins-risk-catalogue-item b { display: block; font-size: 12px; }
+.ins-risk-catalogue-item small { display: block; font-size: 10.5px; color: var(--text-2); margin-top: 2px; }
+.ins-risk-catalogue-item .ins-link { white-space: nowrap; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; }

@@ -1850,7 +1850,6 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 8px 18px -14px rgba(0, 0, 0, .9);
   filter: none;
 }
-.farm-page .farm-glyph-letter { font-weight: 900; }
 
 /* ==========================================================================
    9. STATES — empty, loading, stale, errors, notices

@@ -525,8 +525,6 @@
       "categories": "类别",
       "networks": "网络",
       "whitepaper": "白皮书",
-
-
       "identity": "简介",
       "snapshot": "{{name}}概览：市场历史、供应量和活动。",
       "readDescription": "项目介绍",
@@ -3310,7 +3308,7 @@
       "done": "Done"
     },
     "shell": {
-      "brand": "FBT Protection",
+      "brand": "保护",
       "walletStatus": "Wallet / server status",
       "apiOffline": "API offline",
       "notConnected": "Not connected",
@@ -3517,7 +3515,8 @@
     },
     "claims": {
       "created": "Claim {{number}} created ({{status}}). Now submit it.",
-      "createdToast": "Claim {{number}} created"
+      "createdToast": "Claim {{number}} created",
+      "downloadReport": "下载报告"
     },
     "providerUnavailable": "Provider temporarily unavailable",
     "unknown": "Unknown",

@@ -525,8 +525,6 @@
       "categories": "Категории",
       "networks": "Сети",
       "whitepaper": "Белая книга",
-
-
       "identity": "Описание",
       "snapshot": "Обзор {{name}}: история рынка, предложение и активность.",
       "readDescription": "Описание проекта",
@@ -3317,7 +3315,7 @@
       "done": "Готово"
     },
     "shell": {
-      "brand": "Защита FBT",
+      "brand": "Защита",
       "walletStatus": "Статус кошелька/сервера",
       "apiOffline": "API недоступен",
       "notConnected": "Не подключено",
@@ -3528,7 +3526,8 @@
     },
     "claims": {
       "created": "Претензия {{number}} создана ({{status}}). Теперь отправьте её.",
-      "createdToast": "Претензия {{number}} создана"
+      "createdToast": "Претензия {{number}} создана",
+      "downloadReport": "Скачать отчёт"
     },
     "providerUnavailable": "Провайдер временно недоступен",
     "unknown": "Неизвестно",

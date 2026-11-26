@@ -122,6 +122,15 @@ export default function InsuranceMarketplace() {
   const needsProduct = productsState === 'ready' && typeProducts.length > 0 && !selectedProduct;
 
   async function getQuotes() {
+    /* The live provider refuses to price a purchase before its wording is
+       accepted. Without this guard the user got the generic «not available»
+       card for a missing checkbox — a real cause with the wrong sentence. */
+    if (!termsAccepted) {
+      setErr(t('insurance.reason.TERMS_ACCEPTANCE_REQUIRED'));
+      setErrCode('TERMS_ACCEPTANCE_REQUIRED');
+      setResult(null); setFailures([]); setWarnings([]);
+      return;
+    }
     setErr(''); setErrCode(''); setResult(null); setFailures([]); setBusy(true);
     try {
       const res = await insuranceApi.quote({

@@ -428,8 +428,6 @@
       "categories": "Categories",
       "networks": "Networks",
       "whitepaper": "Whitepaper",
-
-
       "identity": "Overview",
       "snapshot": "A snapshot of {{name}}: market history, supply and activity.",
       "readDescription": "Project description",
@@ -17498,7 +17496,7 @@
       "done": "Done"
     },
     "shell": {
-      "brand": "FBT Protection",
+      "brand": "Protection",
       "walletStatus": "Wallet / server status",
       "apiOffline": "API offline",
       "notConnected": "Not connected",
@@ -17770,7 +17768,8 @@
         "oracle-failure": "Oracle failure",
         "protocol-exploit": "Protocol exploit",
         "wallet-custody-loss": "Wallet / custody loss"
-      }
+      },
+      "downloadReport": "Download report"
     },
     "providerUnavailable": "Provider temporarily unavailable",
     "unknown": "Unknown",

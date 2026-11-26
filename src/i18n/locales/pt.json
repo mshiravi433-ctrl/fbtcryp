@@ -525,8 +525,6 @@
       "categories": "Categorias",
       "networks": "Redes",
       "whitepaper": "Livro branco",
-
-
       "identity": "Identidade",
       "snapshot": "Um retrato de {{name}}: histórico de mercado, oferta e atividade.",
       "readDescription": "Descrição do projeto",
@@ -3317,7 +3315,7 @@
       "done": "Done"
     },
     "shell": {
-      "brand": "FBT Protection",
+      "brand": "Proteção",
       "walletStatus": "Wallet / server status",
       "apiOffline": "API offline",
       "notConnected": "Not connected",
@@ -3524,7 +3522,8 @@
     },
     "claims": {
       "created": "Claim {{number}} created ({{status}}). Now submit it.",
-      "createdToast": "Claim {{number}} created"
+      "createdToast": "Claim {{number}} created",
+      "downloadReport": "Baixar relatório"
     },
     "providerUnavailable": "Provider temporarily unavailable",
     "unknown": "Unknown",

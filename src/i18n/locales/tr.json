@@ -525,8 +525,6 @@
       "categories": "Kategoriler",
       "networks": "Ağlar",
       "whitepaper": "Teknik belge",
-
-
       "identity": "Kimlik",
       "snapshot": "{{name}} özeti: piyasa geçmişi, arz ve etkinlik.",
       "readDescription": "Proje açıklaması",
@@ -3317,7 +3315,7 @@
       "done": "Tamam"
     },
     "shell": {
-      "brand": "FBT Koruması",
+      "brand": "Koruma",
       "walletStatus": "Cüzdan/sunucu durumu",
       "apiOffline": "API çevrimdışı",
       "notConnected": "Bağlı değil",
@@ -3524,7 +3522,8 @@
     },
     "claims": {
       "created": "Talep {{number}} oluşturuldu ({{status}}). Şimdi gönder.",
-      "createdToast": "Talep {{number}} oluşturuldu"
+      "createdToast": "Talep {{number}} oluşturuldu",
+      "downloadReport": "Raporu indir"
     },
     "providerUnavailable": "Sağlayıcı geçici olarak kullanılamıyor",
     "unknown": "Bilinmiyor",

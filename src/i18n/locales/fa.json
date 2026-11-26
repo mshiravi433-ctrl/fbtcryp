@@ -428,8 +428,6 @@
       "categories": "دسته‌بندی",
       "networks": "شبکه‌ها",
       "whitepaper": "وایت‌پیپر",
-
-
       "identity": "شناسنامه",
       "snapshot": "نگاهی به {{name}}؛ تاریخچه، عرضه و فعالیت بازار در یک قاب.",
       "readDescription": "معرفی پروژه",
@@ -17498,7 +17496,7 @@
       "done": "تمام"
     },
     "shell": {
-      "brand": "محافظت FBT",
+      "brand": "محافظت",
       "walletStatus": "وضعیت کیف پول / سرور",
       "apiOffline": "API آفلاین",
       "notConnected": "متصل نیست",
@@ -17770,7 +17768,8 @@
         "oracle-failure": "خطای اوراکل",
         "protocol-exploit": "حمله به پروتکل",
         "wallet-custody-loss": "از دست رفتن کیف پول / امانت‌داری"
-      }
+      },
+      "downloadReport": "دانلود گزارش"
     },
     "providerUnavailable": "ارائه‌دهنده موقتاً در دسترس نیست",
     "unknown": "نامشخص",

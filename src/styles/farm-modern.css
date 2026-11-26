@@ -1516,7 +1516,6 @@
   background: linear-gradient(180deg, rgba(255, 255, 255, .2), transparent 58%);
 }
 .farm-page .farm-glyph-accent { fill: rgba(255, 255, 255, .22); stroke: rgba(255, 255, 255, .48); }
-.farm-page .farm-glyph-letter { font-weight: 900; letter-spacing: -.3px; }
 :root[data-theme='light'] .farm-page .farm-glyph { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .32), 0 6px 16px -12px rgba(15, 23, 42, .45); }
 
 /* ==========================================================================

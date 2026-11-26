@@ -120,7 +120,7 @@ describe('collateral-loop page panel', () => {
     expect(switches).toBe(1);
   });
 
-  it('lives in one collapsible box that keeps its content mounted while closed', () => {
+  it('opens as a full-screen popup that keeps its content mounted while closed', () => {
     renderPanel();
     const box = screen.getByTestId('loan-collateral-loop');
     const toggle = screen.getByTestId('loop-box-toggle');
@@ -128,10 +128,18 @@ describe('collateral-loop page panel', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(screen.getByTestId('loop-calculator')).toBeTruthy();
     fireEvent.click(toggle);
-    expect(box.getAttribute('data-open')).toBe('true');
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.click(toggle);
-    expect(box.getAttribute('data-open')).toBe('false');
+    // The expanded shell is portalled to <body>; re-query instead of holding
+    // the pre-portal DOM node.
+    expect(screen.getByTestId('loan-collateral-loop').getAttribute('data-open')).toBe('true');
+    expect(screen.getByTestId('loan-collateral-loop').getAttribute('role')).toBe('dialog');
+    expect(document.body.querySelector('.loan-loop-portal')).toBeTruthy();
+    expect(screen.getByTestId('loop-box-close')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('loop-box-close'));
+    expect(screen.getByTestId('loan-collateral-loop').getAttribute('data-open')).toBe('false');
+    expect(document.body.querySelector('.loan-loop-portal')).toBeNull();
+    fireEvent.click(screen.getByTestId('loop-box-toggle'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByTestId('loan-collateral-loop').getAttribute('data-open')).toBe('false');
   });
 
   it('runs a live USDC/USDT loop end to end: plan → prepare → sign each step → quote review → complete', async () => {

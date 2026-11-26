@@ -525,8 +525,6 @@
       "categories": "श्रेणियां",
       "networks": "नेटवर्क",
       "whitepaper": "श्वेतपत्र",
-
-
       "identity": "परिचय",
       "snapshot": "{{name}} की झलक: बाजार इतिहास, आपूर्ति और गतिविधि।",
       "readDescription": "परियोजना का विवरण",
@@ -3317,7 +3315,7 @@
       "done": "Done"
     },
     "shell": {
-      "brand": "FBT Protection",
+      "brand": "Protection",
       "walletStatus": "Wallet / server status",
       "apiOffline": "API offline",
       "notConnected": "Not connected",
@@ -3524,7 +3522,8 @@
     },
     "claims": {
       "created": "Claim {{number}} created ({{status}}). Now submit it.",
-      "createdToast": "Claim {{number}} created"
+      "createdToast": "Claim {{number}} created",
+      "downloadReport": "रिपोर्ट डाउनलोड करें"
     },
     "providerUnavailable": "Provider temporarily unavailable",
     "unknown": "Unknown",
