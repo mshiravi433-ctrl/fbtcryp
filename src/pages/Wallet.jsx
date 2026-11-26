@@ -13,12 +13,12 @@ import WalletConnectSheet from '../components/WalletConnectSheet';
 import SendSheet from '../components/SendSheet';
 import ReceiveSheet from '../components/ReceiveSheet';
 import BtcHubSheet from '../components/BtcHubSheet';
+import WalletCommandSheet from '../components/wallet/WalletCommandSheet';
+import WalletOptimizeSheet from '../components/wallet/WalletOptimizeSheet';
 import WalletActionRow from '../components/WalletActionRow';
 import WalletIntelTiles from '../components/WalletIntelTiles';
-import WalletPnl from '../components/WalletPnl';
 import ActiveOrdersCard from '../components/ActiveOrdersCard';
 import TokenDetailSheet from '../components/TokenDetailSheet';
-import Portfolio from '../pages/Portfolio';
 import { explorerAddr } from '../lib/chains';
 import { solanaAddress } from '../lib/solanaWallet';
 import { EVM_CHAINS, TOKENS } from '../lib/chains';
@@ -28,7 +28,7 @@ import { useHideBalances } from '../hooks/useHideBalances';
 import { useMultiChainPortfolio } from '../hooks/useMultiChainPortfolio';
 import { useBtcHolding } from '../hooks/useBtcHolding';
 import { useAppStore } from '../store/useAppStore';
-import { exportWallet, shareWalletBackup, BACKUP_FILENAME } from '../lib/walletBackup';
+import { exportWallet, shareWalletBackup, importWalletBackup, forceImportWalletBackup, BACKUP_FILENAME } from '../lib/walletBackup';
 import { revealMnemonic } from '../lib/localWallet';
 import { buildIntelligence } from '../lib/portfolioIntel';
 import { cleanAssetText, groupHoldings } from '../lib/walletRisk';
@@ -575,90 +575,6 @@ function WalHero({
   );
 }
 
-function ChainBreakdown({ portfolio, activeChainId, t, currency, hideBalances = false }) {
-  const chains = portfolio.chains || [];
-  /* A chain's share of the hero total — the same figures, one division.
-     Withheld while balances are hidden (proportions leak allocation even
-     when amounts do not), and on errored chains that contributed nothing. */
-  const shareOf = (c) => {
-    if (hideBalances || c.error || !(portfolio.totalValue > 0) || !(c.totalValue > 0)) return null;
-    return Math.min(100, Math.max(0, (c.totalValue / portfolio.totalValue) * 100));
-  };
-  return (
-    <section className="wallet-pie-card wal-card" style={{ padding: 15 }}>
-      <div className="walx-sec-head">
-        <span className="walx-sec-title">
-          <span className="walx-sec-ico" aria-hidden="true"><IconWalNodes width={16} height={16} /></span>
-          <span className="wallet-section-title">{t('wallet.networks')}</span>
-        </span>
-        <span className="walx-sec-count">{chains.length} {t('wallet.networksUnit')}</span>
-      </div>
-      <div className="wal-chain-grid">
-        <div className="wal-chain-row" role="listitem">
-          <span className="walx-chain-ico" aria-hidden="true"><IconGlobe width={18} height={18} /></span>
-          <span className="walx-chain-main">
-            <strong>{t('wallet.allNetworks')}</strong>
-            <small>{portfolio.totalCount} {t('wallet.assetsUnit')}</small>
-          </span>
-          <span className="walx-chain-fig">
-            <span className="walx-chain-val mono">{fmtCurrencyValue(portfolio.totalValue, currency)}</span>
-          </span>
-        </div>
-        {chains.map((c) => {
-          const isActive = activeChainId === c.chainId;
-          const pct = shareOf(c);
-          return (
-            <div
-              key={c.chainId}
-              className="wal-chain-row"
-              role="listitem"
-              style={{ '--chip-color': c.chainColor }}
-            >
-              {/* The network's own vendored SVG mark — the same artwork the
-                  NetworkSelect popup uses, so a chain looks like itself in
-                  both places instead of a coloured dot here and a logo there. */}
-              <span className="walx-chain-ico" aria-hidden="true">
-                <AssetIcon chain={c.chainId} size={26} radius={8} />
-              </span>
-              <span className="walx-chain-main">
-                <strong>
-                  <span dir="auto">{EVM_CHAINS[c.chainId]?.name || c.chainShort}</span>
-                  {isActive && <span className="wal-badge-live">{t('wallet.active.title')}</span>}
-                </strong>
-                <small>
-                  {c.error
-                    ? t('wallet.chainUnavailable')
-                    : `${c.rows.length} ${t('wallet.assetsUnit')} · ${fmtQty(c.nativeAmount)} ${c.native.symbol}`}
-                </small>
-                {pct != null && (
-                  <span
-                    className="walx-share"
-                    style={{ '--walx-cc': c.chainColor || 'var(--rgb-1)', '--walx-pct': pct.toFixed(1) }}
-                    aria-hidden="true"
-                  />
-                )}
-              </span>
-              <span className="walx-chain-fig">
-                <span className="walx-chain-val mono" style={{ color: c.error ? 'var(--text-3)' : undefined }}>
-                  {c.error ? '—' : (fmtCurrencyValue(c.totalValue, currency) ?? '—')}
-                </span>
-                {pct != null && <span className="walx-chain-pct mono">{pct < 0.1 ? '<0.1' : pct.toFixed(1)}%</span>}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-/**
- * Asset list with CROSS-CHAIN UNIFICATION.
- *
- * On "All networks" the same symbol held on several chains merges into ONE
- * row (ETH on 3 networks → one row with the summed amount) with the chains
- * listed underneath. Tapping any row opens the TokenDetailSheet.
- */
 function AssetList({ portfolio, selectedChain, onSelect, onOpenToken, t, currency }) {
   const [q, setQ] = useState('');
   const rows = useMemo(() => {
@@ -982,13 +898,14 @@ export default function Wallet() {
   const [backupSheet, setBackupSheet] = useState(false);
   const [backupResult, setBackupResult] = useState(null);
   const [backupErr, setBackupErr] = useState(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreResult, setRestoreResult] = useState(null);
 
   /* Command-center state */
   const [sendToken, setSendToken] = useState(null);
   const [tokenGroup, setTokenGroup] = useState(null);
   const [tokenSheet, setTokenSheet] = useState(false);
-  const [intelSheet, setIntelSheet] = useState(false);
-  const [pnlSheet, setPnlSheet] = useState(false);
+  const [commandSheet, setCommandSheet] = useState({ open: false, tab: 'overview' });
   const [optimizeSheet, setOptimizeSheet] = useState(false);
   const [nftChip, setNftChip] = useState({ state: 'unknown' });
 
@@ -1060,19 +977,14 @@ export default function Wallet() {
 
   const canOptimize = connected && displayPortfolio.rows.length > 0 && displayPortfolio.totalValue > 0;
 
+  /* Optimization is a real diagnosis over the verified rows, not a jump to
+     an empty intent draft. Unconnected users still get the explanation sheet;
+     the optimizer itself reads nothing until a wallet is attached. */
   const handleOptimize = useCallback(() => {
     haptic?.('select');
     if (!connected) { setConnectOpen(true); return; }
-    if (!canOptimize) { setOptimizeSheet(true); return; }
-    const priced = [...displayPortfolio.rows].filter((r) => r.value != null).sort((a, b) => b.value - a.value);
-    const top = priced[0];
-    if (!top) { setOptimizeSheet(true); return; }
-    const native = displayPortfolio.rows.find((r) => r.chainId === wallet.chainId && r.native);
-    let from = top.symbol;
-    let to = from === 'USDC' ? 'ETH' : 'USDC';
-    if (native && from === native.symbol) to = 'USDC';
-    navigate(`/intent?tab=compose&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&chain=${wallet.chainId}`);
-  }, [haptic, connected, canOptimize, displayPortfolio.rows, wallet.chainId, navigate]);
+    setOptimizeSheet(true);
+  }, [haptic, connected]);
 
   const handleOpenToken = useCallback((group) => {
     haptic?.('select');
@@ -1189,17 +1101,7 @@ export default function Wallet() {
             <>
               {/* Intelligence | P&L | Risk — the command-center trio */}
               <div className="walx-rise" style={{ marginTop: 14, '--walx-d': '140ms' }}>
-                <WalletIntelTiles intel={intel} onIntel={() => setIntelSheet(true)} onPnl={() => setPnlSheet(true)} />
-              </div>
-
-              <div className="walx-rise" style={{ marginTop: 14, '--walx-d': '190ms' }}>
-                <ChainBreakdown
-                  portfolio={displayPortfolio}
-                  activeChainId={wallet.chainId}
-                  t={t}
-                  currency={currency}
-                  hideBalances={hideBalances}
-                />
+                <WalletIntelTiles intel={intel} onIntel={() => setCommandSheet({ open: true, tab: 'overview' })} onPnl={() => setCommandSheet({ open: true, tab: 'pnl' })} />
               </div>
 
               <div className="walx-rise" style={{ marginTop: 14, '--walx-d': '240ms' }}>
@@ -1300,18 +1202,24 @@ export default function Wallet() {
         onSend={handleTokenSend}
       />
 
-      {/* Intelligence — the existing embedded Portfolio dashboard, fed by this
-          page's own verified read (see the `intel` memo): opening the sheet
-          paints instantly and can never claim the wallet is not connected
-          while it demonstrably is. */}
-      <Sheet open={intelSheet} onClose={() => setIntelSheet(false)} title={t('intel.title')} anchor="bottom" size="lg">
-        <Portfolio embedded portfolio={displayPortfolio} intel={intel} />
-      </Sheet>
+      {/* ONE deep command sheet: portfolio, opportunity, risk, P&L, security,
+          DeFi, NFT and alerts. The page's verified read is handed in so the
+          sheet never re-reads sixteen chains just to paint an open dialog. */}
+      <WalletCommandSheet
+        open={commandSheet.open}
+        onClose={() => setCommandSheet((v) => ({ ...v, open: false }))}
+        initialTab={commandSheet.tab}
+        portfolio={displayPortfolio}
+        intel={intel}
+        wallet={wallet}
+      />
 
-      {/* P&L detail */}
-      <Sheet open={pnlSheet} onClose={() => setPnlSheet(false)} title={t('wallet.pnl.title')} anchor="bottom" size="lg">
-        <WalletPnl intel={intel} />
-      </Sheet>
+      <WalletOptimizeSheet
+        open={optimizeSheet}
+        onClose={() => setOptimizeSheet(false)}
+        portfolio={displayPortfolio}
+        wallet={wallet}
+      />
 
       {/* Optimize explainer — why no draft was prefilled */}
       <Sheet open={optimizeSheet} onClose={() => setOptimizeSheet(false)} title={t('wallet.optimize')} anchor="bottom">
@@ -1369,7 +1277,7 @@ export default function Wallet() {
             <div className="mono" style={{ fontSize: 11.5, marginTop: 3, wordBreak: 'break-all' }}>{backupResult.hint} / {BACKUP_FILENAME}</div>
           </div>
         )}
-        {backupErr && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`wallet.backupErr.${backupErr}`)}</p>}
+        {backupErr && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`wnew.backupErr.${backupErr}`, { defaultValue: t(`wallet.backupErr.${backupErr}`) })}</p>}
         <button
           className="btn btn-primary"
           style={{ marginTop: 12 }}
@@ -1399,6 +1307,48 @@ export default function Wallet() {
             } catch { setBackupErr('FAILED'); haptic?.('error'); }
           }}
         >{t('wallet.backupShare')}</button>
+        <div className="xfer-summary-divider" style={{ margin: '14px 0' }} />
+        <strong style={{ fontSize: 12.5 }}>{t('wnew.restoreTitle')}</strong>
+        <p className="muted" style={{ fontSize: 11.5, lineHeight: 1.8, margin: '6px 0 10px' }}>
+          {t('wnew.restoreBody')}
+        </p>
+        <input
+          type="file"
+          accept="application/json,.json"
+          data-testid="wallet-restore-file"
+          aria-label={t('wnew.restorePick')}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (!file) return;
+            setBackupErr(null);
+            setRestoreResult(null);
+            setRestoreBusy(true);
+            try {
+              const text = await file.text();
+              try {
+                const res = await importWalletBackup(text);
+                setRestoreResult(res.address);
+              } catch (err) {
+                if (err?.message !== 'DIFFERENT_WALLET') throw err;
+                if (!window.confirm(t('wnew.restoreConfirm'))) return;
+                const res = await forceImportWalletBackup(text);
+                setRestoreResult(res.address);
+              }
+              await wallet.restoreLocalSession?.();
+              useAppStore.getState().notify(t('wnew.restoreDone'), 'success');
+              haptic?.('success');
+            } catch (err) {
+              setBackupErr(['BAD_FILE', 'WRONG_FILE', 'UNSUPPORTED_FILE', 'UNSAFE_KDF', 'INCOMPLETE'].includes(err?.message) ? err.message : 'FAILED');
+              haptic?.('error');
+            } finally {
+              setRestoreBusy(false);
+            }
+          }}
+        />
+        {restoreBusy && <p className="faint" style={{ fontSize: 11.5 }}>{t('wnew.restoreBusy')}</p>}
+        {restoreResult && <p className="up mono" dir="ltr" style={{ fontSize: 11, wordBreak: 'break-all' }}>✓ {shortAddress(restoreResult, 8)}</p>}
+        {backupErr && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`wnew.backupErr.${backupErr}`, { defaultValue: t(`wallet.backupErr.${backupErr}`) })}</p>}
         <p className="notice" style={{ marginTop: 12 }}>{t('wallet.backupPaperNote')}</p>
       </Sheet>
     </PageTransition>
@@ -1410,4 +1360,4 @@ export default function Wallet() {
    can only ever see the disconnected state, and the hero is where this
    screen's hardest-won behaviours live (number discipline, masking,
    spectrum honesty). The default export above is the routed page. */
-export { WalHero, ChainBreakdown, AssetList };
+export { WalHero, AssetList };

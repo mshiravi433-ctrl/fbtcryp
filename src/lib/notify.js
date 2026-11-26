@@ -27,6 +27,7 @@
 
 import { isIOS as _isIOS, isWebView as _isWebView, isStandalone as _isStandalone } from './platform.js';
 import { apiBase } from './apiBase.js';
+import { alertCopy, normalizeAlertLang, PREVIEW_COPY } from './alertCopy.js';
 import {
   channelForTone,
   formatValue,
@@ -1324,30 +1325,10 @@ export function installPushBridge() {
  *
  * @param {'profit'|'loss'|'pending'|'ready'|'alert'|'info'} tone
  */
-const PREVIEW_COPY = {
-  fa: {
-    profit: { title: 'به هدف رسید — سود', body: 'پوزیشن BTC→USDT با سود بسته شد.' },
-    loss: { title: 'حد ضرر فعال شد', body: 'پوزیشن ETH→USDT با ضرر بسته شد.' },
-    pending: { title: 'سفارش خودکار در انتظار', body: 'BTC→USDT ثبت شد. با رسیدن به هدف خبر می‌دهیم.' },
-    ready: { title: 'آمادهٔ سواپ', body: 'اتوماسیون شما به نتیجه رسید. برای امضا اپ را باز کن.' },
-    alert: { title: 'هشدار امنیتی', body: 'یک درخواست امضا در انتظار تأیید شماست.' },
-    info: { title: 'خلاصهٔ روزانهٔ FBT', body: 'بازار امروز را ببین؛ همه‌چیز در یک نگاه.' }
-  },
-  en: {
-    profit: { title: 'Target reached — in profit', body: 'Your BTC→USDT position closed in profit.' },
-    loss: { title: 'Stop-loss triggered', body: 'Your ETH→USDT position closed at a loss.' },
-    pending: { title: 'Automation pending', body: 'BTC→USDT is set. We will alert you when it targets.' },
-    ready: { title: 'Ready to swap', body: 'Your automation reached its result. Tap to sign.' },
-    alert: { title: 'Security alert', body: 'A signing request is waiting for your approval.' },
-    info: { title: 'FBT daily digest', body: 'See today’s market at a glance.' }
-  }
-};
-
 export async function previewNotification(tone = 'ready', { lang } = {}) {
   const key = String(tone || 'ready').toLowerCase();
-  const language = String(lang || (typeof document !== 'undefined' && document.documentElement.lang) || 'fa').split('-')[0];
-  const pack = PREVIEW_COPY[language] || PREVIEW_COPY.en;
-  const copy = pack[key] || pack.ready;
+  const language = normalizeAlertLang(lang || (typeof document !== 'undefined' && document.documentElement.lang) || 'fa');
+  const copy = alertCopy(PREVIEW_COPY, language, key) || alertCopy(PREVIEW_COPY, 'en', 'ready');
 
   /* Audible here and now: a preview is a user gesture, so the audio context is
      allowed to start and the chime is the point of the exercise. */

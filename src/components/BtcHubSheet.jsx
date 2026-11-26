@@ -15,6 +15,8 @@ import { useBtcHolding } from '../hooks/useBtcHolding';
 import { useAppStore } from '../store/useAppStore';
 import { fmtNum, fmtQty } from '../lib/format';
 import BtcSendSheet from './BtcSendSheet';
+import BtcReceiveSheet from './BtcReceiveSheet';
+import '../styles/wallet-command.css';
 
 /**
  * THE BITCOIN POPUP — the ONLY doorway to the wallet's bitcoin leg.
@@ -64,6 +66,7 @@ export default function BtcHubSheet({ open, onClose, vaultState = 'none', getSig
 
   const [copied, setCopied] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [receiveOpen, setReceiveOpen] = useState(false);
   const [sendPrefill, setSendPrefill] = useState(null);
   const [convertBusy, setConvertBusy] = useState(false);
   const [convertError, setConvertError] = useState(null);
@@ -304,16 +307,30 @@ export default function BtcHubSheet({ open, onClose, vaultState = 'none', getSig
                 </p>
               )}
 
-              <div className="row" style={{ gap: 8, marginTop: 12 }}>
+              {/* The two doors the wallet page's bitcoin action needs: each
+                  opens its own popup, so the hub stays a hub. */}
+              <div className="wallet-action-row btc-hub-actions" style={{ gap: 8, marginTop: 12 }}>
                 <button
                   type="button"
-                  className="btn btn-ghost"
-                  style={{ flex: 1, minHeight: 44, borderRadius: 13 }}
+                  className="wallet-action-btn btc-hub-action btc-hub-action-send"
                   disabled={!address || confirmed <= 0}
                   onClick={() => { setSendPrefill(null); setSendOpen(true); }}
                 >
+                  <span aria-hidden="true">↗</span>
                   {t('btc.card.send')}
                 </button>
+                <button
+                  type="button"
+                  className="wallet-action-btn btc-hub-action btc-hub-action-recv"
+                  disabled={!address}
+                  onClick={() => setReceiveOpen(true)}
+                >
+                  <span aria-hidden="true">↙</span>
+                  {t('wnew.btcReceive')}
+                </button>
+              </div>
+
+              <div className="row" style={{ gap: 8, marginTop: 8 }}>
                 {convertible ? (
                   <button
                     type="button"
@@ -517,6 +534,13 @@ export default function BtcHubSheet({ open, onClose, vaultState = 'none', getSig
       open={sendOpen}
       onClose={() => { setSendOpen(false); setSendPrefill(null); setConvertError(null); }}
       prefill={sendPrefill}
+    />
+    <BtcReceiveSheet
+      open={receiveOpen}
+      onClose={() => setReceiveOpen(false)}
+      address={address}
+      loading={holding.loading}
+      error={holding.error}
     />
     </>
   );

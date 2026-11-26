@@ -3901,12 +3901,15 @@ export default function run() {
 
     t('the More menu no longer lists /portfolio', !/to: '\/portfolio'/.test(more));
     t('the /portfolio route still exists in App.jsx', /path="\/portfolio"/.test(app));
-    t('the wallet embeds the Portfolio dashboard (Intelligence tile)',
-      wallet.includes('<Portfolio embedded') && /intelSheet/.test(wallet));
+    t('the wallet embeds the Portfolio dashboard in its command sheet',
+      /WalletCommandSheet/.test(wallet)
+      && /<Portfolio embedded/.test(read('src/components/wallet/WalletCommandSheet.jsx')));
     t('the wallet has one equal-sized action row incl. Optimize',
       wallet.includes('<WalletActionRow') && /wallet-optimize/.test(read('src/components/WalletActionRow.jsx')));
-    t('Optimize only navigates to the Intent OS compose screen (never signs)',
-      /navigate\(`\/intent\?tab=compose/.test(wallet) && !/optimize.*sign/i.test(wallet));
+    t('Optimize diagnoses live rows and never signs by itself',
+      /WalletOptimizeSheet/.test(wallet)
+      && /analyzeWallet/.test(read('src/components/wallet/WalletOptimizeSheet.jsx'))
+      && !/optimize.*sign/i.test(wallet));
     t('the unified cross-chain asset list feeds the token detail sheet',
       wallet.includes('<AssetList') && wallet.includes('<TokenDetailSheet') && /groupHoldings/.test(wallet));
     t('the ACTIVE card reads real local orders and intents',
@@ -14321,53 +14324,21 @@ export default function run() {
 
     const recv = read('src/components/ReceiveSheet.jsx');
 
-    /*
-     * ─── THE ACTUAL CAUSE OF "RECEIVE DOES NOTHING" ─────────────────────────
-     * BtcSection calls useEffect, and the file imported only useMemo/useState.
-     * The ReferenceError was thrown during render and swallowed by the route
-     * boundary, so the sheet mounted to nothing and the button looked dead.
-     *
-     * Asserted as an invariant rather than a one-off fix: EVERY hook this file
-     * calls must appear in its react import. That catches the next useRef or
-     * useCallback added to a section component the same way.
-     */
+    /* The EVM receive popup is now ONLY the EVM address. The bitcoin leg
+       moved into its own popup off the BTC hub, where it belongs — a locked
+       or injected wallet no longer sees a dead bitcoin panel under the EVM QR. */
     const reactImport = (recv.match(/import\s*\{([^}]*)\}\s*from\s*'react'/) || [, ''])[1];
-    const hooksUsed = [...new Set((recv.match(/\buse[A-Z][A-Za-z]*/g) || []))]
+    const hooksUsed = [...new Set((stripCode(recv).match(/\buse[A-Z][A-Za-z]*/g) || []))]
       .filter((h) => ['useState', 'useEffect', 'useMemo', 'useRef', 'useCallback', 'useLayoutEffect'].includes(h));
     const notImported = hooksUsed.filter((h) => !new RegExp(`\\b${h}\\b`).test(reactImport));
     t('ReceiveSheet imports every React hook it calls' +
       (notImported.length ? ` — missing: ${notImported.join(', ')}` : ''),
       notImported.length === 0);
-
-    /*
-     * The second bug in the same file: the Bitcoin section returned early for
-     * a locked wallet and only THEN called useMemo, so locking or unlocking
-     * changed the hook count and React threw. Every hook must therefore sit
-     * above the first return in the component.
-     */
-    {
-      const i = recv.indexOf('function BtcSection');
-      const lines = (i > 0 ? recv.slice(i) : '').split('\n');
-      /*
-       * Indentation is the discriminator. A `return` at two spaces leaves the
-       * COMPONENT; the same word at four or more is leaving a callback (the
-       * `return undefined` inside the effect's early exit, or its cleanup),
-       * which is not a branch React ever sees.
-       */
-      let guard = -1;
-      for (let n = 1; n < lines.length; n += 1) {
-        if (/^\}/.test(lines[n])) break;                     /* end of component */
-        if (/^ {2}(?:if\s*\(|return\b)/.test(lines[n])) { guard = n; break; }
-      }
-      const after = guard > 0 ? lines.slice(guard).join('\n') : '';
-      t('no hook in BtcSection runs after a conditional return',
-        guard > 0 && !/\buse(?:State|Effect|Memo|Ref|Callback)\s*\(/.test(after));
-    }
-
-    /* A locked wallet must SAY it is locked. A blank Bitcoin panel is the same
-       user-visible failure as the crash it replaced. */
-    t('a locked wallet gets a message, not an empty Bitcoin panel',
-      recv.includes('receive.btc.locked'));
+    t('the EVM receive sheet no longer carries a bitcoin panel',
+      !/function BtcSection|BtcSection\s*\/\>|receive\.btc\.title/.test(recv));
+    const btcReceive = read('src/components/BtcReceiveSheet.jsx');
+    t('the BTC receive popup carries its own QR, address and warning',
+      /FancyQr/.test(btcReceive) && /wnew\.btcOnlyNative/.test(btcReceive));
 
     /* Item 2: the doorway exists, is wired, and is a callback — never a route. */
     const row = read('src/components/WalletActionRow.jsx');
@@ -14420,10 +14391,27 @@ export default function run() {
       /BtcSendSheet/.test(hub) && /qrcode/.test(hub));
     t('the wallet page mounts no bottom BTC card',
       !/components\/BtcCard|BtcCard/.test(stripCode(read('src/pages/Wallet.jsx'))));
-    const breakdown = read('src/pages/Wallet.jsx').split('function ChainBreakdown')[1]?.split('function AssetList')[0] || '';
-    t('the lower network card is a readout, not a second network selector',
-      breakdown.length > 0 && !/onSelect\(/.test(breakdown) && !/<button/.test(breakdown));
+    /* One network selector is enough: the "all networks" box was removed
+       from the page body, leaving the NetworkSelect popup in the hero. */
     const walletSrc = read('src/pages/Wallet.jsx');
+    t('the all-networks summary card is gone from the wallet body',
+      !/ChainBreakdown/.test(walletSrc) && !/walx-chain-grid/.test(walletSrc));
+    t('the BTC hub opens send and receive as separate popups',
+      /btc-hub-action-send/.test(hub) && /btc-hub-action-recv/.test(hub)
+      && /BtcReceiveSheet/.test(hub) && /BtcSendSheet/.test(hub));
+    const scanner = read('src/components/QrScanner.jsx');
+    t('the QR scanner offers a torch instead of a dead close cross on mobile',
+      /applyConstraints\(\{ advanced: \[\[?\{ torch/.test(scanner) || /torch: !torchOn/.test(scanner));
+    t('the send sheet moves long asset lists into a popup and warns on new addresses',
+      /send-asset-picker-open/.test(read('src/components/SendSheet.jsx'))
+      && /xfer-unknown-card/.test(read('src/components/SendSheet.jsx')));
+    t('backup files can be restored, not only downloaded',
+      /importWalletBackup/.test(walletSrc) && /forceImportWalletBackup/.test(walletSrc)
+      && /wallet-restore-file/.test(walletSrc));
+    t('the wallet opens one deep command sheet and a real optimizer',
+      /WalletCommandSheet/.test(walletSrc) && /WalletOptimizeSheet/.test(walletSrc)
+      && /wallet-command-smart/.test(read('src/components/wallet/WalletCommandSheet.jsx')));
+
     t('the wallet folds its own BTC into the displayed portfolio, priced like any asset',
       /useBtcHolding/.test(walletSrc)
       && /marketRows\?\.find\(\(c\) => c\.id === 'bitcoin'\)/.test(walletSrc)

@@ -18,6 +18,8 @@
  *   · the progress rail is a real `progressbar` with the value, so a screen
  *     reader says «۳ از ۴» instead of nothing;
  *   · dismissing removes the card, and tapping it deep-links and clears it;
+ *   · the shade keeps THREE in the store but draws ONE compact card with a
+ *     «1/3» counter, so it never covers the price the alert is about;
  *   · the Settings preview renders the SAME card (it is the same component) and
  *     has no close button, because there is nothing to dismiss.
  */
@@ -169,13 +171,15 @@ describe('notification bar', () => {
     expect(window.location.hash).toBe('#/');
   });
 
-  it('never stacks more than three cards over the screen', () => {
+  it('keeps three in the store but shows one compact card with its counter', () => {
     for (let i = 0; i < 6; i += 1) {
       useAppStore.getState().showNotifBar({ title: `n${i}`, tone: 'info' });
     }
     expect(useAppStore.getState().notifBar).toHaveLength(3);
     const { container } = render(<NotificationBar />);
-    expect(container.querySelectorAll('.nbar__card')).toHaveLength(3);
+    const cards = container.querySelectorAll('.nbar__card');
+    expect(cards).toHaveLength(1);
+    expect(container.querySelector('.nbar__time')?.textContent).toContain('1/3');
   });
 
 

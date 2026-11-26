@@ -29,7 +29,7 @@ import { IconX } from './Icons';
  * animated: the animated layer and the positioned layer must not be the same
  * element.)
  */
-export default function Sheet({ open, onClose, children, title, size = 'md', anchor = 'center', className, testId }) {
+export default function Sheet({ open, onClose, children, title, size = 'md', anchor = 'center', className, testId, headerAction = null }) {
   const { t } = useTranslation();
   /*
    * prefers-reduced-motion (and the in-app reduce-motion setting): the dialog
@@ -94,9 +94,11 @@ export default function Sheet({ open, onClose, children, title, size = 'md', anc
               {title && (
                 <div className="sheet-title">
                   <h2 className="h2" style={{ margin: 0 }}>{title}</h2>
-                  <button className="sheet-close" onClick={onClose} aria-label={t('common.close')} type="button" data-testid={testId ? `${testId}-close` : undefined}>
-                    <IconX width={15} height={15} />
-                  </button>
+                  {headerAction ?? (
+                    <button className="sheet-close" onClick={onClose} aria-label={t('common.close')} type="button" data-testid={testId ? `${testId}-close` : undefined}>
+                      <IconX width={15} height={15} />
+                    </button>
+                  )}
                 </div>
               )}
               <div className="sheet-body">{children}</div>

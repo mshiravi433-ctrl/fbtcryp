@@ -19,6 +19,7 @@
  * negative P&L resolves to `loss` (crimson).
  */
 
+import { alertCopy, normalizeAlertLang, ORDER_COPY, INTENT_COPY, FILLED_COPY } from '../src/lib/alertCopy.js';
 import {
   STAGE_TONE,
   resolveTone,
@@ -58,43 +59,6 @@ export const STAGE_STYLE = {
   }
 };
 
-const COPY = {
-  order: {
-    en: {
-      pending: { title: 'Position pending', body: '{base}→{quote} is waiting. We will alert you when the target is hit.' },
-      ready: { title: 'Target reached — ready to swap', body: '1 {base} reached {rate} {quote}. Open the app to swap.' },
-      closed: { title: 'Position closed', body: '{base}→{quote} is closed.' }
-    },
-    fa: {
-      pending: { title: 'پوزیشن در انتظار', body: '{base}→{quote} ثبت شد و در انتظار است. با رسیدن به هدف خبر می‌دهیم.' },
-      ready: { title: 'به نتیجه رسید — آمادهٔ سواپ', body: '۱ {base} به {rate} {quote} رسید. برای سواپ اپ را باز کن.' },
-      closed: { title: 'پوزیشن بسته شد', body: '{base}→{quote} بسته شد.' }
-    },
-    ar: {
-      pending: { title: 'مركز في الانتظار', body: '{base}→{quote} بانتظار الهدف.' },
-      ready: { title: 'تحقق الهدف — جاهز للمبادلة', body: '1 {base} وصل إلى {rate} {quote}. افتح التطبيق.' },
-      closed: { title: 'أُغلق المركز', body: '{base}→{quote} أُغلق.' }
-    }
-  },
-  intent: {
-    en: {
-      pending: { title: 'Intent pending', body: 'A new intent for {base}→{quote} is waiting.' },
-      ready: { title: 'Desired result reached', body: 'The intent for {base}→{quote} is ready to complete.' },
-      closed: { title: 'Intent position closed', body: '{base}→{quote} has settled and the position is closed.' }
-    },
-    fa: {
-      pending: { title: 'اینتنت در انتظار', body: 'اینتنت جدید {base}→{quote} در انتظار است.' },
-      ready: { title: 'رسیدن به نتیجهٔ دلخواه', body: 'اینتنت {base}→{quote} به نتیجه رسید و آمادهٔ تکمیل است.' },
-      closed: { title: 'پوزیشن اینتنت بسته شد', body: '{base}→{quote} تسویه و بسته شد.' }
-    },
-    ar: {
-      pending: { title: 'النية في الانتظار', body: 'نية {base}→{quote} بانتظار التنفيذ.' },
-      ready: { title: 'تحقق النتيجة المطلوبة', body: 'النية {base}→{quote} جاهزة للإكمال.' },
-      closed: { title: 'أُغلق مركز النية', body: '{base}→{quote} أُغلق.' }
-    }
-  }
-};
-
 /**
  * ─── SCHEDULED ALERTS: «زمان سواپ رسید» IS NOT «به هدف رسید» ────────────────
  * A DCA run and a price target produce the same STAGE («ready») and mean two
@@ -114,12 +78,6 @@ const COPY = {
  * guarantee. Filled at the minimum the user set, which is the only thing the
  * server can truthfully say.
  */
-const FILLED_COPY = {
-  fa: { title: 'سفارش حد پر شد', body: 'سفارش حد شما با موفقیت در قیمت هدف پر شد.' },
-  en: { title: 'Limit order filled', body: 'Your limit order was filled at the target price.' },
-  ar: { title: 'تم تنفيذ أمر الحد', body: 'تم تنفيذ أمر الحد الخاص بك بنجاح عند السعر المستهدف.' }
-};
-
 const SCHEDULE_COPY = {
   fa: { title: 'زمان سواپ رسید', body: 'نوبت بعدی برنامهٔ {base}→{quote} رسید. اپ را باز کن و سواپ را امضا کن.' },
   en: { title: 'Time to swap', body: 'The next step of your {base}→{quote} plan is due. Open the app and sign the swap.' },
@@ -158,8 +116,8 @@ export function buildStageAlert({
 } = {}) {
   const st = STAGES.includes(stage) ? stage : 'ready';
   const family = kind === 'intent' ? 'intent' : 'order';
-  const pack = COPY[family][lang] || COPY[family].en;
-  const line = pack[st];
+  const familyCopy = family === 'intent' ? INTENT_COPY : ORDER_COPY;
+  const line = alertCopy(familyCopy, lang, st);
   const style = STAGE_STYLE[st];
   /*
    * A scheduled alert replaces the copy wholesale rather than editing the
@@ -168,12 +126,12 @@ export function buildStageAlert({
    * a pending or closed stage never is.
    */
   const scheduleLine = scheduled && st === 'ready'
-    ? (SCHEDULE_COPY[String(lang).split('-')[0]] || SCHEDULE_COPY.en)
+    ? (SCHEDULE_COPY[normalizeAlertLang(lang)] || SCHEDULE_COPY.en)
     : null;
   /* A keeper fill is a «closed» stage with its own sentence: the generic
      «position closed» line would tell the user nothing they can act on. */
   const fillLine = filled && st === 'closed' && family === 'order'
-    ? (FILLED_COPY[String(lang).split('-')[0]] || FILLED_COPY.en)
+    ? (FILLED_COPY[normalizeAlertLang(lang)] || FILLED_COPY.en)
     : null;
   const source = scheduleLine
     ? { title: scheduleLine.title, body: scheduleLine.body }

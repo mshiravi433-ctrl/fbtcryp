@@ -156,6 +156,12 @@ export default function QrScanner({ open, onClose, onResult, parse = parseScanne
    * box with no explanation, which is indistinguishable from a broken scanner.
    */
   const [phase, setPhase] = useState('idle');
+  /* Rear-camera torch. `applyConstraints({advanced:[{torch}]})` is the only
+     standard way to turn it on inside a WebView; it is opt-in and never
+     assumed, because a device without the capability answers with a rejected
+     promise rather than silently doing nothing. */
+  const [torchAvailable, setTorchAvailable] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
 
   /*
    * ─── THE GREY-CAMERA BUG ──────────────────────────────────────────────────
@@ -234,6 +240,12 @@ export default function QrScanner({ open, onClose, onResult, parse = parseScanne
           return;
         }
         streamRef.current = stream;
+        const track = stream.getVideoTracks?.()[0];
+        const canTorch = Boolean(track?.getCapabilities?.()?.torch);
+        if (!cancelled) {
+          setTorchAvailable(canTorch);
+          setTorchOn(false);
+        }
         const video = videoRef.current;
         if (!video) return;
         video.srcObject = stream;
@@ -331,6 +343,8 @@ export default function QrScanner({ open, onClose, onResult, parse = parseScanne
     return () => {
       cancelled = true;
       setPhase('idle');
+      setTorchAvailable(false);
+      setTorchOn(false);
       stop();
     };
     /*
@@ -346,8 +360,39 @@ export default function QrScanner({ open, onClose, onResult, parse = parseScanne
   // Belt and braces: also release on unmount, however that happens.
   useEffect(() => stop, [stop]);
 
+  const toggleTorch = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (!track?.applyConstraints) return;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: !torchOn }] });
+      setTorchOn(!torchOn);
+    } catch {
+      /* Some drivers advertise torch but refuse the constraint when the
+         camera is already open. Withdraw the control rather than leave a
+         button that does nothing. */
+      setTorchAvailable(false);
+    }
+  }, [torchOn]);
+
+  const headerAction = torchAvailable ? (
+    <button
+      type="button"
+      className={`sheet-close ${torchOn ? 'is-on' : ''}`}
+      onClick={() => void toggleTorch()}
+      aria-pressed={torchOn ? 'true' : 'false'}
+      aria-label={t('wnew.scanTorch')}
+      title={t('wnew.scanTorch')}
+      data-testid="qr-scanner-torch"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M8 2h8l-1 5H9L8 2Z" />
+        <path d="M9 7 6.5 20.5a1 1 0 0 0 1.6 1L12 16l3.9 5.5a1 1 0 0 0 1.6-1L15 7" />
+      </svg>
+    </button>
+  ) : null;
+
   return (
-    <Sheet open={open} onClose={onClose} title={t('scan.title')}>
+    <Sheet open={open} onClose={onClose} title={t('scan.title')} headerAction={headerAction}>
       {error ? (
         <div style={{ padding: '6px 2px' }}>
           <p className="muted" style={{ fontSize: 12.6, lineHeight: 1.8 }}>
