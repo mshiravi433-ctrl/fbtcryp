@@ -340,14 +340,70 @@ export default function SolanaWalletTab() {
                 <li key={k}>{t(`solana.how.${k}`)}</li>
               ))}
             </ol>
-            <p className="notice notice-danger" style={{ marginTop: 10 }}>
-              {t('solana.notSolana')}
-            </p>
+            <div
+              role="note"
+              style={{
+                marginTop: 14,
+                padding: '12px 14px',
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.12), rgba(245, 158, 11, 0.08))',
+                border: '1px solid rgba(244, 63, 94, 0.28)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 10,
+                fontSize: 12.2,
+                lineHeight: 1.75,
+                color: 'var(--text)'
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 8,
+                  background: 'rgba(244, 63, 94, 0.18)',
+                  color: '#fb7185',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  fontWeight: 800,
+                  fontSize: 13
+                }}
+              >
+                !
+              </span>
+              <span>{t('solana.notSolana')}</span>
+            </div>
           </section>
 
-          <section className="sol-wal-note" id="wallet-custody">
-            <h3>{t('wallet.custodyTitle')}</h3>
-            <p className="muted" style={{ fontSize: 12.3, lineHeight: 1.8, margin: '7px 0 0' }}>
+          <section
+            className="sol-wal-note"
+            id="wallet-custody"
+            style={{
+              marginTop: 14,
+              padding: '14px 16px',
+              borderRadius: 16,
+              background: 'linear-gradient(145deg, rgba(20, 241, 149, 0.06), rgba(153, 69, 255, 0.06))',
+              border: '1px solid rgba(255, 255, 255, 0.10)',
+              backdropFilter: 'blur(12px)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: '#14F195',
+                  boxShadow: '0 0 8px rgba(20, 241, 149, 0.6)'
+                }}
+              />
+              <h3 style={{ margin: 0, fontSize: 13.5, fontWeight: 700 }}>{t('wallet.custodyTitle')}</h3>
+            </div>
+            <p className="muted" style={{ fontSize: 12.2, lineHeight: 1.85, margin: 0 }}>
               {t('wallet.custodyNotice')}
             </p>
           </section>

@@ -900,6 +900,7 @@ export default function Wallet() {
   const [backupErr, setBackupErr] = useState(null);
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [restoreResult, setRestoreResult] = useState(null);
+  const [restoreExpanded, setRestoreExpanded] = useState(false);
 
   /* Command-center state */
   const [sendToken, setSendToken] = useState(null);
@@ -1287,57 +1288,172 @@ export default function Wallet() {
           }}
         >{t('wallet.backupSave')}</button>
         <button
+          type="button"
           className="btn btn-ghost"
-          style={{ marginTop: 9 }}
-          onClick={async () => {
-            try {
-              const res = await shareWalletBackup();
-              if (res?.ok) {
-                useAppStore.getState().notify(res.downloaded ? 'فایل دانلود شد — پوشه Downloads را ببین' : res.webShared ? 'اشتراکگذاری انجام شد' : 'آماده شد', 'success');
-                haptic?.('success');
-              } else { setBackupErr('FAILED'); haptic?.('error'); }
-            } catch { setBackupErr('FAILED'); haptic?.('error'); }
+          style={{
+            marginTop: 9,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            borderRadius: 14,
+            border: '1px solid rgba(255,255,255,0.12)',
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))'
           }}
-        >{t('wallet.backupShare')}</button>
-        <div className="xfer-summary-divider" style={{ margin: '14px 0' }} />
-        <strong style={{ fontSize: 12.5 }}>{t('wnew.restoreTitle')}</strong>
-        <p className="muted" style={{ fontSize: 11.5, lineHeight: 1.8, margin: '6px 0 10px' }}>
-          {t('wnew.restoreBody')}
-        </p>
-        <input
-          type="file"
-          accept="application/json,.json"
-          data-testid="wallet-restore-file"
-          aria-label={t('wnew.restorePick')}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            e.target.value = '';
-            if (!file) return;
+          onClick={async () => {
             setBackupErr(null);
-            setRestoreResult(null);
-            setRestoreBusy(true);
             try {
-              const text = await file.text();
-              try {
-                const res = await importWalletBackup(text);
-                setRestoreResult(res.address);
-              } catch (err) {
-                if (err?.message !== 'DIFFERENT_WALLET') throw err;
-                if (!window.confirm(t('wnew.restoreConfirm'))) return;
-                const res = await forceImportWalletBackup(text);
-                setRestoreResult(res.address);
+              const res = await exportWallet();
+              const payload = typeof res?.json === 'string' ? res.json : JSON.stringify(res);
+              const fileName = res?.filename || 'fbt-wallet-backup.json';
+              if (typeof navigator !== 'undefined' && navigator.share) {
+                const file = typeof File !== 'undefined' ? new File([payload], fileName, { type: 'application/json' }) : null;
+                if (file && navigator.canShare?.({ files: [file] })) {
+                  await navigator.share({ title: t('wallet.backupShare'), files: [file] });
+                } else {
+                  await navigator.share({ title: t('wallet.backupShare'), text: payload });
+                }
+                useAppStore.getState().notify('اشتراک‌گذاری انجام شد', 'success');
+                haptic?.('success');
+                return;
               }
-              await wallet.restoreLocalSession?.();
-              useAppStore.getState().notify(t('wnew.restoreDone'), 'success');
-              haptic?.('success');
-            } catch (err) {
-              setBackupErr(['BAD_FILE', 'WRONG_FILE', 'UNSUPPORTED_FILE', 'UNSAFE_KDF', 'INCOMPLETE'].includes(err?.message) ? err.message : 'FAILED');
+              if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(payload);
+                useAppStore.getState().notify('فایل پشتیبان برای اشتراک‌گذاری کپی شد', 'success');
+                haptic?.('success');
+                return;
+              }
+              setBackupErr('FAILED');
               haptic?.('error');
-            } finally {
-              setRestoreBusy(false);
+            } catch (e) {
+              if (e?.name === 'AbortError') return;
+              setBackupErr(e?.message === 'NO_VAULT' ? 'NO_VAULT' : 'FAILED');
+              haptic?.('error');
             }
           }}
-        />
+        >
+          <span aria-hidden="true">↗</span>
+          <span>{t('wallet.backupShare')}</span>
+        </button>
+        <div className="xfer-summary-divider" style={{ margin: '14px 0' }} />
+        <div
+          style={{
+            borderRadius: 16,
+            border: '1px solid rgba(255,255,255,0.10)',
+            background: 'linear-gradient(145deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015))',
+            overflow: 'hidden'
+          }}
+        >
+          <button
+            type="button"
+            aria-expanded={restoreExpanded}
+            onClick={() => setRestoreExpanded((v) => !v)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              padding: '12px 14px',
+              background: 'transparent',
+              border: 0,
+              color: 'inherit',
+              cursor: 'pointer',
+              textAlign: 'start'
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 9,
+                  background: 'rgba(139, 92, 246, 0.16)',
+                  color: '#c4b5fd',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 13
+                }}
+              >
+                ↺
+              </span>
+              <strong style={{ fontSize: 12.8 }}>{t('wnew.restoreTitle')}</strong>
+            </span>
+            <span
+              aria-hidden="true"
+              style={{
+                fontSize: 12,
+                opacity: 0.75,
+                transform: restoreExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s ease'
+              }}
+            >
+              ▾
+            </span>
+          </button>
+          {restoreExpanded && (
+            <div style={{ padding: '0 14px 14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <p className="muted" style={{ fontSize: 11.5, lineHeight: 1.8, margin: '10px 0 12px' }}>
+                {t('wnew.restoreBody')}
+              </p>
+              <label
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: '14px 12px',
+                  borderRadius: 13,
+                  border: '1px dashed rgba(139, 92, 246, 0.42)',
+                  background: 'rgba(139, 92, 246, 0.08)',
+                  cursor: restoreBusy ? 'wait' : 'pointer',
+                  fontSize: 12.2,
+                  fontWeight: 600
+                }}
+              >
+                <span>{restoreBusy ? t('wnew.restoreBusy') : t('wnew.restorePick')}</span>
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  data-testid="wallet-restore-file"
+                  aria-label={t('wnew.restorePick')}
+                  style={{ display: 'none' }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    setBackupErr(null);
+                    setRestoreResult(null);
+                    setRestoreBusy(true);
+                    try {
+                      const text = await file.text();
+                      try {
+                        const res = await importWalletBackup(text);
+                        setRestoreResult(res.address);
+                      } catch (err) {
+                        if (err?.message !== 'DIFFERENT_WALLET') throw err;
+                        if (!window.confirm(t('wnew.restoreConfirm'))) return;
+                        const res = await forceImportWalletBackup(text);
+                        setRestoreResult(res.address);
+                      }
+                      await wallet.restoreLocalSession?.();
+                      useAppStore.getState().notify(t('wnew.restoreDone'), 'success');
+                      haptic?.('success');
+                    } catch (err) {
+                      setBackupErr(['BAD_FILE', 'WRONG_FILE', 'UNSUPPORTED_FILE', 'UNSAFE_KDF', 'INCOMPLETE'].includes(err?.message) ? err.message : 'FAILED');
+                      haptic?.('error');
+                    } finally {
+                      setRestoreBusy(false);
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          )}
+        </div>
         {restoreBusy && <p className="faint" style={{ fontSize: 11.5 }}>{t('wnew.restoreBusy')}</p>}
         {restoreResult && <p className="up mono" dir="ltr" style={{ fontSize: 11, wordBreak: 'break-all' }}>✓ {shortAddress(restoreResult, 8)}</p>}
         {backupErr && <p className="notice notice-danger" style={{ marginTop: 10 }}>{t(`wnew.backupErr.${backupErr}`, { defaultValue: t(`wallet.backupErr.${backupErr}`) })}</p>}
