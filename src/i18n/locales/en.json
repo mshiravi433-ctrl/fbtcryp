@@ -6302,7 +6302,12 @@
       "NFT_RATE_LIMITED": "Too many requests to the NFT provider right now. Try again in a minute.",
       "NFT_UPSTREAM_DOWN": "The NFT data provider is down. Your NFTs are safe on-chain — this screen just cannot read them right now."
     },
-    "safetyTitle": "Before you trust an NFT you were sent"
+    "safetyTitle": "Before you trust an NFT you were sent",
+    "allNetworks": "All networks",
+    "network": "Network",
+    "indexedOn": "Indexed on {{count}} networks",
+    "partialIndex": "Some networks could not be checked right now. The items below come from the networks that answered.",
+    "notIndexedNote": "BNB Chain and Solana are not indexed by this provider yet. We show only networks we can verify, never an empty list that looks like “you own nothing”."
   },
   "orders": {
     "heroLive": "Live watching",
@@ -19268,6 +19273,120 @@
       "labelledActivity": "Labelled scanner activity",
       "unqualifiedTape": "Large swaps, identity unverified",
       "whaleBoard": "Whale board"
+    }
+  },
+  "wnew": {
+    "title": "Wallet command center",
+    "smartWallet": "Open Smart Wallet",
+    "tab": {
+      "overview": "Overview",
+      "opportunity": "Opportunities",
+      "risk": "Risk",
+      "pnl": "P&L",
+      "security": "Security",
+      "defi": "DeFi",
+      "nft": "My NFTs",
+      "alerts": "Alerts"
+    },
+    "netWorth": "Net worth",
+    "assets": "Assets",
+    "riskScore": "Risk score",
+    "coverage": "Data coverage",
+    "changeTitle": "Real changes",
+    "changeNote": "Computed from saved snapshots, not a manufactured chart.",
+    "opportunityTitle": "Opportunity engine",
+    "engineError": "The engine could not read data; retry or open the engine.",
+    "engineLoading": "Reading connected sources…",
+    "openEngine": "Open opportunity engine",
+    "riskTitle": "Portfolio risk",
+    "measured": "Measured families",
+    "contracts": "Contracts scanned",
+    "riskBand": "Band",
+    "riskFamilies": "Risk families",
+    "noRiskData": "Not enough data to show yet.",
+    "unavailable": "Unavailable sources",
+    "pnlByAsset": "P&L by asset",
+    "securityDeep": "Deep security",
+    "securityBody": "The score is computed from real device settings and the wallet lock state. Approval review needs an indexer; where none exists the app says \"not scanned\".",
+    "revoke": "Security audit",
+    "defiTitle": "DeFi — real status",
+    "defiBody": "The portfolio does not index protocol positions, so no number is invented. Stable assets you can actually use and real doors to farm/lending are below.",
+    "defiStable": "Stable assets held",
+    "noStable": "No stable asset was read.",
+    "nftTitle": "NFTs across networks",
+    "nftBody": "Indexed networks are marked queryable; every other network is honestly \"not indexed\" so an empty list never reads as \"you own nothing\".",
+    "indexed": "Queryable",
+    "notIndexed": "Not indexed",
+    "openNft": "Open NFT page",
+    "alertsTitle": "Alerts on your phone",
+    "alertsBody": "Automatic orders need a push registration in the browser or app. A test alert is sent after enabling.",
+    "alertsOn": "Enabled",
+    "alertsEnable": "Enable alerts",
+    "alertsTest": "Send test alert",
+    "btcReceive": "Receive BTC",
+    "btcReceiveTitle": "Receive bitcoin",
+    "btcReceiveSub": "BIP-84 address of your local vault",
+    "btcOnlyNative": "Send native BTC on the Bitcoin network only. EVM tokens will not arrive at this address.",
+    "btcRecvLoading": "Deriving address…",
+    "btcRecvUnavailable": "Bitcoin address unavailable.",
+    "scanTorch": "Turn on torch",
+    "sendUnknownTitle": "Unknown address",
+    "sendUnknownBody": "This address is not in your send history. On-chain transfers are irreversible — compare the full address with a trusted source.",
+    "sendUnknownConfirm": "I confirm:",
+    "sendAssetsCount": "assets",
+    "sendSearchAsset": "Search asset",
+    "restoreTitle": "Restore a backup file",
+    "restoreBody": "Choose an encrypted FBT backup file. The password is the one you set when the wallet was created.",
+    "restorePick": "Choose backup file",
+    "restoreConfirm": "This file belongs to a different address. Replacing the current wallet cannot be undone. Continue?",
+    "restoreDone": "Wallet restored",
+    "restoreBusy": "Checking file…",
+    "backupErr": {
+      "BAD_FILE": "Invalid file.",
+      "WRONG_FILE": "This is not an FBT backup.",
+      "UNSUPPORTED_FILE": "Backup version unsupported.",
+      "UNSAFE_KDF": "Unsafe encryption parameters.",
+      "INCOMPLETE": "Backup data is incomplete."
+    },
+    "opt": {
+      "title": "Wallet optimization",
+      "score": "Score",
+      "total": "Total",
+      "top": "Largest holding",
+      "stable": "Stable",
+      "chains": "Chains",
+      "findings": "Findings",
+      "open": "Open",
+      "disclaimer": "Based only on holdings read on this device. Not financial advice or a return forecast.",
+      "openManual": "Open Intent composer",
+      "noPricedHoldings": {
+        "title": "No priced holdings",
+        "body": "No score or suggestion is produced until a balance and a price have been read."
+      },
+      "concentration": {
+        "title": "High concentration in {{symbol}}",
+        "body": "{{pct}}% of the verified value sits in one asset. Splitting part of it into a stable asset or another network reduces single-asset risk."
+      },
+      "stableBuffer": {
+        "title": "Small stable buffer",
+        "body": "Less than 5% of holdings are stable. A small USDC reserve makes gas and entering opportunities easier."
+      },
+      "singleChain": {
+        "title": "Single network",
+        "body": "Every priced holding is on one network. Spreading across networks reduces single-network risk."
+      },
+      "gasReserve": {
+        "title": "Low gas reserve",
+        "body": "The active chain native balance is below $5; you may not be able to sign a transaction."
+      },
+      "unpriced": {
+        "title": "Unpriced holdings",
+        "body": "Some holdings were read but have no price; they are excluded from the total."
+      },
+      "balanced": {
+        "title": "Balanced mix",
+        "body": "No extreme concentration or gas shortage was found in the data read."
+      }
     }
   }
 }

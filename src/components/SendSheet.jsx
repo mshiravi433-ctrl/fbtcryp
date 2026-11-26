@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import Sheet from './Sheet';
 import QrScanner, { scannerSupported } from './QrScanner';
+import '../styles/wallet-command.css';
 import { useWallet } from '../context/WalletContext';
 import { formatUnitsExact, getTokenBalance, NATIVE_GAS_FLOOR, sendToken } from '../lib/swap';
 import { EVM_CHAINS, TOKENS } from '../lib/chains';
@@ -62,6 +63,8 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
   const [scanOpen, setScanOpen] = useState(false);
+  const [assetOpen, setAssetOpen] = useState(false);
+  const [assetQuery, setAssetQuery] = useState('');
   const [balance, setBalance] = useState(null);
   const [stage, setStage] = useState('form'); // form → confirm → sending → done
   const [error, setError] = useState(null);
@@ -593,7 +596,13 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
               own checkbox, separate from the transaction confirmation.
             */}
             {shield && shield.flags.length > 0 && (
-              <div className="xfer-shield" data-testid="address-shield">
+              <div className="xfer-shield xfer-unknown-card" data-testid="address-shield">
+                <span className="xfer-unknown-ico" aria-hidden="true"><IconShield width={17} height={17} /></span>
+                <span className="xfer-unknown-copy">
+                  <strong>{t('wnew.sendUnknownTitle')}</strong>
+                  <p>{t('wnew.sendUnknownBody')}</p>
+                  <code dir="ltr">{to.trim()}</code>
+                </span>
                 {shield.flags.filter((f) => f.severity === 'reject').map((f) => (
                   <p key={f.code} className="notice notice-danger" style={{ marginTop: 0 }} data-testid="address-shield-block">
                     {t(f.i18nKey, f.params)}
@@ -607,7 +616,7 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
                       onChange={(e) => setAddressOk(e.target.checked)}
                     />
                     <span>
-                      {t('intentAI.addressShield.flag.firstTime', { fingerprint: shield.fingerprint })}
+                      {t('wnew.sendUnknownConfirm')} {t('intentAI.addressShield.flag.firstTime', { fingerprint: shield.fingerprint })}
                     </span>
                   </label>
                 )}
@@ -620,7 +629,18 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
               said which. Only rendered when there is a real choice.
             */}
             <div className="xfer-label" style={{ marginTop: 15 }}>{t('send.asset')}</div>
-            {chainTokens.length > 1 ? (
+            {chainTokens.length > 6 ? (
+              <button
+                type="button"
+                className="xfer-chip xfer-chip-picker"
+                onClick={() => { setAssetQuery(''); setAssetOpen(true); }}
+                data-testid="send-asset-picker-open"
+              >
+                <TokenIcon token={token} chainId={wallet.chainId} size={18} />
+                <span>{token.symbol}</span>
+                <span className="faint">· {chainTokens.length} {t('wnew.sendAssetsCount')}</span>
+              </button>
+            ) : chainTokens.length > 1 ? (
               <div className="xfer-chips">
                 {chainTokens.map((tk) => (
                   <button
@@ -706,6 +726,33 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
             </button>
           </div>
         )}
+      </Sheet>
+
+      {/* Long token lists move into their own searchable popup instead of
+          wrapping into a wall of chips that buries the amount field. */}
+      <Sheet open={assetOpen} onClose={() => setAssetOpen(false)} title={t('send.asset')} anchor="bottom">
+        <input
+          className="xfer-input xfer-input-ltr"
+          value={assetQuery}
+          onChange={(e) => setAssetQuery(e.target.value)}
+          placeholder={t('wnew.sendSearchAsset')}
+          aria-label={t('wnew.sendSearchAsset')}
+        />
+        <div className="xfer-chips" style={{ marginTop: 10 }}>
+          {chainTokens
+            .filter((tk) => String(tk.symbol).toLowerCase().includes(assetQuery.trim().toLowerCase()))
+            .map((tk) => (
+              <button
+                key={tk.symbol}
+                type="button"
+                className={`xfer-chip ${token.symbol === tk.symbol ? 'active' : ''}`}
+                onClick={() => { setTokenSym(tk.symbol); setAmount(''); setAssetOpen(false); }}
+              >
+                <TokenIcon token={tk} chainId={wallet.chainId} size={18} />
+                {tk.symbol}
+              </button>
+            ))}
+        </div>
       </Sheet>
 
       <QrScanner

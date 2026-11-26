@@ -8,8 +8,10 @@ import Sheet from '../components/Sheet';
 import { useWallet } from '../context/WalletContext';
 import { useTelegram } from '../context/TelegramContext';
 import { EVM_CHAINS } from '../lib/chains';
+import { aggregateNftResults } from '../lib/nftAggregation.js';
 import { openUrl } from '../lib/browser';
 import { IconChevronLeft, IconExternal, IconShield } from '../components/Icons';
+import '../styles/nft-modern.css';
 
 import { apiBase } from '../lib/apiBase.js';
 
@@ -68,6 +70,10 @@ export default function Nft() {
   const [items, setItems] = useState([]);
   const [error, setError] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [failedChains, setFailedChains] = useState([]);
+  /* 'all' is a real mode, not a missing selection: the indexer covers five
+     EVM networks and asking the user to check them one by one reads as an
+     empty wallet. Each network is still fetched and reported separately. */
 
   // Which chains the backend can actually index. Asked once, because
   // guessing and then failing is worse than knowing up front.
@@ -80,8 +86,9 @@ export default function Nft() {
         if (!alive) return;
         const list = Array.isArray(data?.chains) ? data.chains : [];
         setChains({ list, configured: Boolean(data?.configured) });
-        // Prefer the chain the wallet is already on.
-        setChainId(list.includes(wallet.chainId) ? wallet.chainId : list[0] ?? null);
+        // Start with every indexed network; a single-network view is still
+        // one tap away in the picker.
+        setChainId('all');
       } catch {
         if (alive) setChains({ list: [], configured: false });
       }
@@ -95,20 +102,40 @@ export default function Nft() {
     if (!wallet.address || !chainId) return;
     setState('loading');
     setError(null);
-    try {
-      const res = await fetch(`${API_BASE}/nft/${chainId}/${wallet.address}`);
+    setFailedChains([]);
+    const readChain = async (id) => {
+      const res = await fetch(`${API_BASE}/nft/${id}/${wallet.address}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error || `HTTP_${res.status}`);
       }
       const data = await res.json();
-      setItems(Array.isArray(data?.items) ? data.items : []);
-      setState('done');
+      return Array.isArray(data?.items) ? data.items : [];
+    };
+    try {
+      if (chainId !== 'all') {
+        setItems(await readChain(chainId));
+        setState('done');
+        return;
+      }
+      /* A provider failure on one network must not erase the NFTs we DID
+         verify on the others. allSettled keeps the good answers and counts
+         the gaps, which the UI reports instead of pretending. */
+      const ids = chains?.list ?? [];
+      const results = await Promise.allSettled(ids.map(readChain));
+      const { items: good, failed, allFailed } = aggregateNftResults(ids, results);
+      setFailedChains(failed);
+      setItems(good);
+      if (allFailed) {
+        const reason = results.find((r) => r.status === 'rejected')?.reason;
+        setError(String(reason?.message || 'FAILED'));
+        setState('error');
+      } else setState('done');
     } catch (e) {
       setError(String(e.message || 'FAILED'));
       setState('error');
     }
-  }, [wallet.address, chainId]);
+  }, [wallet.address, chainId, chains?.list]);
 
   useEffect(() => {
     if (wallet.address && chainId) load();
@@ -120,7 +147,7 @@ export default function Nft() {
   );
 
   const openContract = (item) => {
-    const chain = EVM_CHAINS[chainId];
+    const chain = EVM_CHAINS[item._chainId ?? chainId];
     if (!chain || !/^0x[a-fA-F0-9]{40}$/.test(item.contract)) return;
     // Built from a validated address, never from token-supplied data.
     openUrl(`${chain.explorer}/token/${item.contract}`);
@@ -156,7 +183,15 @@ export default function Nft() {
 
       {/* ---------- chain picker ---------- */}
       {wallet.address && chains?.configured && supported.length > 0 && (
-        <div className="tag-scroll">
+        <div className="tag-scroll nft-modern-chips">
+          {supported.length > 1 && (
+            <button
+              className={`tag ${chainId === 'all' ? 'active' : ''}`}
+              onClick={() => { haptic?.('select'); setChainId('all'); }}
+            >
+              {t('nft.allNetworks')}
+            </button>
+          )}
           {supported.map((c) => (
             <button
               key={c.id}
@@ -172,6 +207,8 @@ export default function Nft() {
         </div>
       )}
 
+      {wallet.address && (
+        <div className="nft-modern">
       {/* BNB Chain is the app's default but has no NFT index, so say so rather
           than showing an empty grid that reads as "you own nothing". */}
       {wallet.address && chains?.configured && !chains.list.includes(wallet.chainId) && (
@@ -210,8 +247,8 @@ export default function Nft() {
           <motion.div className="nft-grid" variants={stagger} initial="hidden" animate="show">
             {items.map((n) => (
               <motion.button
-                key={n.id}
-                className="nft-card"
+                key={`${n._chainId ?? chainId}-${n.contract}-${n.tokenId}`}
+                className="nft-card nft-modern-card"
                 variants={riseIn}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setDetail(n)}
@@ -233,6 +270,9 @@ export default function Nft() {
                 </span>
                 <span className="nft-name">{n.name}</span>
                 <span className="nft-coll">{n.collection || '—'}</span>
+                {chainId === 'all' && (
+                  <span className="nft-chain-tag">{EVM_CHAINS[n._chainId]?.short ?? n._chainId}</span>
+                )}
               </motion.button>
             ))}
           </motion.div>
@@ -241,6 +281,19 @@ export default function Nft() {
             <p>{t('nft.safety')}</p>
           </InfoBox>
         </>
+      )}
+
+      {wallet.address && chains?.configured && (
+        <p className="nft-modern-note">
+          {t('nft.notIndexedNote')}
+        </p>
+      )}
+
+      {failedChains.length > 0 && state === 'done' && (
+        <p className="notice">{t('nft.partialIndex')} {failedChains.map((id) => EVM_CHAINS[id]?.short ?? id).join(' · ')}</p>
+      )}
+
+        </div>
       )}
 
       {/* ---------- detail ---------- */}
@@ -254,6 +307,10 @@ export default function Nft() {
             )}
 
             <div className="nft-rows">
+              <div className="row-between">
+                <span className="faint">{t('nft.network')}</span>
+                <span style={{ fontSize: 12.4 }}>{EVM_CHAINS[detail._chainId ?? chainId]?.name ?? '—'}</span>
+              </div>
               <div className="row-between">
                 <span className="faint">{t('nft.collection')}</span>
                 <span style={{ fontSize: 12.4 }}>{detail.collection || '—'}</span>

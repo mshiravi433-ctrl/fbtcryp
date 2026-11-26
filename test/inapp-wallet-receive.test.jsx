@@ -18,6 +18,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, screen } from '@testing-library/react';
 import jsQR from 'jsqr';
 import en from '../src/i18n/locales/en.json';
+import BtcReceiveSheet from '../src/components/BtcReceiveSheet.jsx';
 
 const t = (key, values = {}) => {
   const text = key.split('.').reduce((o, k) => o?.[k], en) ?? key;
@@ -164,22 +165,20 @@ describe('the receive sheet', () => {
     expect(root().querySelector('.recv-qr')).toBeNull();
   });
 
-  it('offers the bitcoin address of the same vault only while it is unlocked', () => {
-    const { rerender } = render(<ReceiveSheet open onClose={() => {}} />);
-    // Unlocked local vault: the BTC section is present (its address derives
-    // from the in-memory phrase).
-    expect(root().textContent).toContain(en.receive.btc.title);
-    expect(root().textContent).toContain(en.receive.btc.backupCovered);
-
-    // Locked: no phrase in memory, so no address — and the sheet SAYS so rather
-    // than rendering nothing, which reads as "this app has no bitcoin address".
-    walletState.locked = true;
-    rerender(<ReceiveSheet open onClose={() => {}} />);
-    expect(root().textContent).toContain(en.receive.btc.locked);
-
-    // An external wallet has no phrase here at all, so no bitcoin section.
-    walletState.mode = 'wc';
-    rerender(<ReceiveSheet open onClose={() => {}} />);
+  it('keeps bitcoin in its own popup, not under the EVM receive QR', () => {
+    // The EVM sheet is one address and one warning. A second, bitcoin panel
+    // here is exactly what was removed: it made a locked/injected wallet look
+    // as though it had a dead bitcoin address.
+    walletState.locked = false;
+    walletState.mode = 'local';
+    render(<ReceiveSheet open onClose={() => {}} />);
     expect(root().textContent).not.toContain(en.receive.btc.title);
+    expect(root().textContent).not.toContain(en.receive.btc.backupCovered);
+    cleanup();
+
+    render(<BtcReceiveSheet open onClose={() => {}} address="bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh" />);
+    expect(root().textContent).toContain(en.wnew.btcReceiveTitle);
+    expect(root().textContent).toContain(en.wnew.btcOnlyNative);
+    expect(root().querySelector('.fqr-stage')).toBeTruthy();
   });
 });

@@ -37,7 +37,7 @@
  * format are what test/inapp-wallet-receive.test.jsx decodes; the beauty is
  * all around them.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Sheet from './Sheet';
 import FancyQr from './FancyQr';
@@ -46,7 +46,6 @@ import { useWallet } from '../context/WalletContext';
 import { EVM_CHAINS } from '../lib/chains';
 import { useAppStore } from '../store/useAppStore';
 import { IconCopy, IconCheck } from './Icons';
-import { IconBitcoin } from './WalletArt';
 
 /** 4-character groups so an address can be checked or read aloud. */
 const chunk = (a) => (String(a).match(/.{1,4}/g) ?? []).join(' ');
@@ -150,129 +149,6 @@ export default function ReceiveSheet({ open, onClose }) {
         <p className="notice" style={{ marginTop: 13, width: '100%' }}>{t('receive.warning')}</p>
       </div>
 
-      {/*
-        THE BITCOIN LEG OF THE SAME WALLET (BIP-84, same seed — see
-        lib/btcWallet.js). Shown only for the unlocked local vault: the BTC
-        address is derived from the phrase in memory, exactly like the EVM
-        one above, so the two are always covered by the SAME 12-word backup
-        — which is what the copy below must say out loud, because a user who
-        backed up before this card existed has no reason to believe their
-        paper copy covers bitcoin too.
-      */}
-      <BtcSection />
     </Sheet>
-  );
-}
-
-/**
- * The bitcoin address of the same vault: index 0, native segwit, QR + copy
- * (the same interaction vocabulary as the EVM half above) plus the two
- * backup truths item 8 requires:
- *   — the EXISTING 12-word backup already covers this bitcoin address;
- *   — the encrypted BACKUP FILE alone (no password memory, no words) is not
- *     a bitcoin recovery plan — the walletBackup warning, re-read from the
- *     existing translation so it can never drift from the EVM copy.
- */
-function BtcSection() {
-  const { t } = useTranslation();
-  const wallet = useWallet();
-  const notify = useAppStore((st) => st.notify);
-  const [btcAddr, setBtcAddr] = useState(null);
-  const [copied, setCopied] = useState(false);
-
-  const isLocalVault = wallet?.mode === 'local';
-  const unlocked = isLocalVault && !wallet?.locked && Boolean(wallet?.address);
-
-  useEffect(() => {
-    if (!unlocked) { setBtcAddr(null); return undefined; }
-    let alive = true;
-    (async () => {
-      /* Dynamic, so the bitcoin derivation code is fetched the first time
-         someone actually opens Receive on an unlocked vault — it must never
-         ride along in the initial bundle. */
-      const { btcAddressForSigner } = await import('../lib/btcWallet');
-      const addr = await btcAddressForSigner(wallet.getSigner?.(), { index: 0 });
-      if (alive) setBtcAddr(addr);
-    })();
-    return () => { alive = false; };
-  }, [unlocked, wallet?.address]);
-
-  /*
-   * ─── SECOND FIX IN THE SAME COMPONENT: A HOOK BELOW AN EARLY RETURN ───────
-   * `useMemo` used to sit AFTER `if (!unlocked) return null`, so the number of
-   * hooks this component calls changed with the lock state. Locking or
-   * unlocking the vault while the sheet was open therefore produced React's
-   * "Rendered fewer/more hooks than during the previous render" invariant and
-   * tore the tree down — the same "sometimes it just breaks" class as the bug
-   * above. Every hook now runs unconditionally, before any return. (Today the
-   * QR matrix is built inside FancyQr, which owns its own hooks; the two
-   * useState calls and the derivation effect above stay above the guard for
-   * the same reason, and test/wiring.mjs still asserts it.)
-   */
-
-  /*
-   * A LOCKED local vault used to render nothing at all here, which reads as
-   * "this app has no bitcoin address" — the second half of the reported bug.
-   * There is no phrase in memory to derive from (the zero law), so we cannot
-   * show the address, but we can say exactly why and what to do.
-   */
-  if (!unlocked) {
-    if (!isLocalVault) return null;
-    return (
-      <div style={{ marginTop: 16 }}>
-        <div className="xfer-summary-divider" style={{ margin: '4px 0 14px' }} />
-        <div className="row-between" style={{ marginBottom: 8 }}>
-          <strong style={{ fontSize: 12.5 }}>{t('receive.btc.title')}</strong>
-          <span className="pill" style={{ fontSize: 9 }}>Bitcoin · bech32</span>
-        </div>
-        <p className="notice" style={{ margin: 0, fontSize: 11.5 }}>{t('receive.btc.locked')}</p>
-      </div>
-    );
-  }
-
-  const copy = async () => {
-    if (!btcAddr) return;
-    try {
-      await navigator.clipboard.writeText(btcAddr);
-      setCopied(true);
-      notify('addressCopied', 'success');
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      notify('copyFailed', 'error');
-    }
-  };
-
-  return (
-    <div style={{ marginTop: 16 }}>
-      <div className="xfer-summary-divider" style={{ margin: '4px 0 14px' }} />
-      <div className="row-between" style={{ marginBottom: 8 }}>
-        <strong style={{ fontSize: 12.5 }}>{t('receive.btc.title')}</strong>
-        <span className="pill" style={{ fontSize: 9 }}>Bitcoin · bech32</span>
-      </div>
-
-      {btcAddr ? (
-        <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-          <FancyQr
-            compact
-            value={btcAddr}
-            label={t('receive.btc.title')}
-            className="fqr-mini"
-            accent={['#f7931a', '#ffb347', '#f7931a']}
-            badge={<IconBitcoin width={19} height={19} />}
-          />
-          <div className="mono" dir="ltr" style={{ flex: 1, fontSize: 10.5, wordBreak: 'break-all', lineHeight: 1.7 }}>
-            {chunk(btcAddr)}
-          </div>
-          <button type="button" className="btn btn-ghost btn-sm" style={{ borderRadius: 12 }} onClick={copy} aria-label={t('receive.copy')}>
-            {copied ? <IconCheck width={14} height={14} /> : <IconCopy width={14} height={14} />}
-          </button>
-        </div>
-      ) : (
-        <p className="faint" style={{ fontSize: 11, margin: 0 }}>…</p>
-      )}
-
-      <p className="notice" style={{ marginTop: 10, fontSize: 11 }}>{t('receive.btc.backupCovered')}</p>
-      <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.7, margin: '6px 0 0' }}>{t('wallet.backupWarn')}</p>
-    </div>
   );
 }

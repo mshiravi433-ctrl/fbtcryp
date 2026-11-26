@@ -1,0 +1,192 @@
+/* Wallet command surfaces — BTC receive popup, optimizer and the unified
+   intelligence sheet. All sizing uses logical properties so the same layout
+   holds in fa/en/ar without mirrored special cases. */
+
+.btc-recv {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: center;
+}
+
+.btc-recv-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: start;
+}
+
+.btc-recv-mark {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #f7931a, #ffb300);
+  box-shadow: 0 8px 22px rgba(247, 147, 26, 0.24);
+}
+
+.btc-recv-head strong { display: block; font-size: 13px; }
+.btc-recv-head small { display: block; font-size: 10.5px; color: var(--text-3); line-height: 1.6; }
+.btc-recv-qr { width: min(100%, 252px); }
+.btc-recv-addr {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 11.5px;
+  line-height: 1.85;
+  word-break: break-all;
+  text-align: center;
+}
+.btc-recv .row { width: 100%; }
+.btc-recv .notice, .btc-recv .faint { width: 100%; text-align: start; }
+
+.btc-hub-actions { display: grid; grid-template-columns: 1fr 1fr; }
+.btc-hub-action { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 7px; }
+.btc-hub-action span { font-size: 17px; font-weight: 800; line-height: 1; }
+.btc-hub-action-send { background: linear-gradient(135deg, rgba(247, 147, 26, 0.22), rgba(255, 179, 0, 0.08)); border-color: rgba(247, 147, 26, 0.45); }
+.btc-hub-action-recv { background: linear-gradient(135deg, rgba(0, 229, 255, 0.16), rgba(124, 77, 255, 0.08)); border-color: rgba(0, 229, 255, 0.35); }
+
+/* ── OPTIMIZER ─────────────────────────────────────────────────────────── */
+.wopt { display: grid; gap: 12px; }
+.wopt-head {
+  display: grid;
+  grid-template-columns: 116px 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: radial-gradient(circle at 12% 0%, rgba(0, 229, 255, 0.14), transparent 60%), rgba(255, 255, 255, 0.02);
+}
+.wopt-ring { position: relative; width: 100px; height: 100px; display: grid; place-items: center; }
+.wopt-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.wopt-ring-track { fill: none; stroke: rgba(255, 255, 255, 0.08); stroke-width: 7; }
+.wopt-ring-fill { fill: none; stroke: url(#woptGradient); stroke: #00e5ff; stroke-width: 7; stroke-linecap: round; transition: stroke-dashoffset 400ms ease; }
+.wopt-ring > span { font-size: 22px; font-weight: 900; }
+.wopt-ring > small { position: absolute; bottom: 8px; font-size: 9px; color: var(--text-3); }
+.wopt-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wopt-stats > div { display: grid; gap: 3px; padding: 8px 9px; border-radius: 11px; background: rgba(255, 255, 255, 0.03); }
+.wopt-stats span { font-size: 10px; color: var(--text-3); }
+.wopt-stats b { font-size: 12.5px; }
+.wopt-section-title { font-size: 12px; font-weight: 800; margin-inline-start: 2px; }
+.wopt-findings { display: grid; gap: 8px; }
+.wopt-finding {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+}
+.wopt-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--text-3); }
+.wopt-finding.is-warn .wopt-dot { background: #ffb02e; box-shadow: 0 0 0 4px rgba(255, 176, 46, 0.14); }
+.wopt-finding.is-good .wopt-dot { background: #00ff9d; box-shadow: 0 0 0 4px rgba(0, 255, 157, 0.12); }
+.wopt-copy { flex: 1; min-width: 0; }
+.wopt-copy strong { display: block; font-size: 12.5px; }
+.wopt-copy p { margin: 3px 0 0; font-size: 11px; line-height: 1.7; color: var(--text-3); }
+.wopt-chainbars { display: grid; gap: 7px; }
+.wopt-chainbars > div { display: grid; grid-template-columns: 68px 1fr auto; align-items: center; gap: 8px; font-size: 11px; }
+.wopt-chainbars b { font-size: 10.5px; }
+.wopt-bar { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+.wopt-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #00e5ff, #7c4dff); }
+
+/* ── UNIFIED WALLET COMMAND SHEET ──────────────────────────────────────── */
+.wcmd { display: grid; gap: 12px; }
+.wcmd-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 3px; scrollbar-width: none; }
+.wcmd-tabs::-webkit-scrollbar { display: none; }
+.wcmd-tab {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wcmd-tab.is-active { color: #fff; border-color: rgba(0, 229, 255, 0.5); background: linear-gradient(135deg, rgba(0, 229, 255, 0.2), rgba(124, 77, 255, 0.18)); }
+.wcmd-panel { display: grid; gap: 10px; min-width: 0; }
+.wcmd-card {
+  padding: 13px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+}
+.wcmd-card h3 { margin: 0 0 7px; font-size: 13px; }
+.wcmd-card p { margin: 0; font-size: 11.5px; line-height: 1.8; color: var(--text-3); }
+.wcmd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 8px; }
+.wcmd-stat { display: grid; gap: 4px; padding: 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.035); }
+.wcmd-stat span { font-size: 10px; color: var(--text-3); }
+.wcmd-stat b { font-size: 13px; }
+.wcmd-change { display: grid; gap: 6px; }
+.wcmd-change > div { display: grid; grid-template-columns: 36px 1fr 74px; align-items: center; gap: 8px; font-size: 11px; }
+.wcmd-change i { display: block; height: 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.wcmd-change i::after { content: ''; display: block; height: 100%; width: var(--w, 0%); border-radius: inherit; background: var(--c, #00e5ff); }
+.wcmd-change b { text-align: end; font-size: 10.5px; }
+.wcmd-rows { display: grid; gap: 6px; }
+.wcmd-row { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 11px; background: rgba(255, 255, 255, 0.03); font-size: 11.5px; }
+.wcmd-row > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wcmd-row b { font-size: 11.5px; }
+.wcmd-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.wcmd-actions .btn { flex: 1 1 130px; min-height: 42px; border-radius: 12px; }
+.wcmd-smart {
+  width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px;
+  border: 1px solid rgba(0, 229, 255, 0.35); background: rgba(0, 229, 255, 0.1); color: #00e5ff; cursor: pointer;
+}
+.wcmd-chainchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wcmd-chainchips span { padding: 5px 9px; border-radius: 999px; border: 1px solid var(--line); font-size: 10.5px; }
+.wcmd-chainchips span.is-on { border-color: rgba(0, 255, 157, 0.4); color: #00ff9d; }
+
+@media (max-width: 460px) {
+  .wopt-head { grid-template-columns: 96px 1fr; gap: 10px; padding: 10px; }
+  .wopt-ring { width: 88px; height: 88px; }
+  .wopt-ring svg { width: 88px; height: 88px; }
+  .wopt-stats { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── UNKNOWN/NEW ADDRESS WARNING IN THE SEND POPUP ─────────────────────── */
+.xfer-unknown-card {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 13px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 176, 46, 0.4);
+  background: linear-gradient(140deg, rgba(255, 176, 46, 0.12), rgba(255, 92, 138, 0.06));
+}
+.xfer-unknown-ico {
+  width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px;
+  color: #ffcb6b; background: rgba(255, 176, 46, 0.14);
+}
+.xfer-unknown-copy strong { display: block; font-size: 12.5px; }
+.xfer-unknown-copy p { margin: 4px 0 6px; font-size: 11.5px; line-height: 1.75; color: var(--text-3); }
+.xfer-unknown-copy code {
+  display: block; padding: 8px 9px; border-radius: 9px; font-size: 10.5px; line-height: 1.7;
+  word-break: break-all; background: rgba(0, 0, 0, 0.28); border: 1px solid var(--line);
+}
+.xfer-unknown-card .notice-danger,
+.xfer-unknown-card .xfer-shield-confirm { grid-column: 1 / -1; }
+.xfer-chip-picker { width: 100%; justify-content: flex-start; gap: 8px; min-height: 46px; }
+
+.wallet-action-row { display: flex; gap: 8px; }
+.wallet-action-btn {
+  min-height: 46px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wallet-action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
