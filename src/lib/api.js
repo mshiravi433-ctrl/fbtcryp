@@ -562,9 +562,9 @@ export function normalizeCoin(c = {}) {
     name: c.name,
     image: c.image,
     price: c.current_price ?? 0,
-    change1h: c.price_change_percentage_1h_in_currency ?? 0,
+    change1h: c.price_change_percentage_1h_in_currency ?? null,
     change24h: c.price_change_percentage_24h_in_currency ?? c.price_change_percentage_24h ?? null,
-    change7d: c.price_change_percentage_7d_in_currency ?? 0,
+    change7d: c.price_change_percentage_7d_in_currency ?? null,
     mcap: c.market_cap ?? 0,
     /*
      * The direct (no-backend) CoinGecko path has to carry the SAME fields the
@@ -643,9 +643,9 @@ export function getCoin(id, vs = 'usd') {
           name: raw.name,
           image: raw.image?.large ?? raw.image?.small,
           price: md.current_price?.[vs] ?? 0,
-          change1h: md.price_change_percentage_1h_in_currency?.[vs] ?? 0,
+          change1h: md.price_change_percentage_1h_in_currency?.[vs] ?? null,
           change24h: md.price_change_percentage_24h ?? null,
-          change7d: md.price_change_percentage_7d ?? 0,
+          change7d: md.price_change_percentage_7d ?? null,
           mcap: md.market_cap?.[vs] ?? 0,
           volume: md.total_volume?.[vs] ?? 0,
           rank: raw.market_cap_rank ?? 0,

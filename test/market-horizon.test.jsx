@@ -229,6 +229,43 @@ describe('the horizon rail', () => {
     expect(pillFor('BTC')).toMatch(/0\.3/);
   });
 
+  it('the change chips restore the 24h window they are named after', () => {
+    /* Reported as «فیلترها درست کار نمیکنند»: on 7d, «صعودی‌ها» sorted by 24h
+       while the rail and every row pill still said 7d. The chip and the order
+       must describe the same window. */
+    mount();
+    openTokensTab();
+    fireEvent.click(cell('7d'));
+    expect(cell('7d').getAttribute('aria-checked')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: fa.market.filter.gainers }));
+    expect(cell('24h').getAttribute('aria-checked')).toBe('true');
+    expect(cell('7d').getAttribute('aria-checked')).toBe('false');
+    /* ETH is the biggest 24h move (+4.12); SOL leads 7d (+19.5). */
+    expect(rowOrder()[0]).toBe('ETH');
+
+    fireEvent.click(cell('7d'));
+    fireEvent.click(screen.getByRole('button', { name: fa.market.filter.losers }));
+    expect(cell('24h').getAttribute('aria-checked')).toBe('true');
+    /* SOL is the worst 24h move (-1.20). */
+    expect(rowOrder()[0]).toBe('SOL');
+  });
+
+  it('the sort menu persists the horizon it selects', () => {
+    mount();
+    openTokensTab();
+    fireEvent.click(screen.getByTestId('market-sort'));
+    const option = screen.getAllByRole('menuitemradio')
+      .find((n) => n.textContent.trim() === fa.market.sort.change7d);
+    fireEvent.click(option);
+    expect(localStorage.getItem('fbt.market.horizon')).toBe('7d');
+    cleanup();
+
+    mount();
+    openTokensTab();
+    expect(cell('7d').getAttribute('aria-checked')).toBe('true');
+  });
+
   it('counts the rows it cannot show for the window instead of printing 0%', () => {
     mount();
     openTokensTab();

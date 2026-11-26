@@ -495,3 +495,243 @@
     background: var(--mx-panel) !important;
   }
 }
+
+/* ── 11 · THE FIVE FOLLOW-UPS (2026-11-26) ─────────────────────────────────
+   «یک باکس پشت آیکون سواپ نباشد» · «در لپ تاپ کشیده نباشد» · «بنر پایین
+   مدرن و مینیمال» · «فیلترها درست کار کنند» · «کارت توکن شیشه‌ای باشد».
+
+   This section is still the LAST layer: it wins the cascade without deleting
+   any earlier pass. Only paint and layout are touched here — the feed, the
+   routes, the roles and the reading order stay exactly where they were. */
+
+/* 11.1 · ONE MARK, NO EGG
+   The slot was a token-sized glass box wrapped around a second glass button.
+   It is now an invisible layout slot: the button is the only surface, and the
+   slender market glyph is the only thing on it. No label, no second frame. */
+.mx-market .mx-swap-slot[data-available='true'] {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+.mx-market .mx-swap-btn,
+.mx-market .market-swap-btn {
+  display: inline-grid !important;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 !important;
+  gap: 0 !important;
+  border: 1px solid color-mix(in srgb, var(--mx-cyan) 42%, transparent) !important;
+  border-radius: 11px !important;
+  background:
+    radial-gradient(110% 120% at 0% 0%, color-mix(in srgb, var(--mx-cyan) 20%, transparent), transparent 68%),
+    color-mix(in srgb, var(--mx-violet) 9%, var(--mx-panel-2)) !important;
+  color: var(--mx-cyan) !important;
+  font-size: 0 !important;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: border-color .16s ease, background-color .16s ease;
+}
+.mx-market .mx-swap-btn > svg,
+.mx-market .market-swap-btn > svg {
+  width: 16px !important;
+  height: 16px !important;
+  stroke-width: 1.25;
+}
+.mx-market .mx-swap-label { display: none !important; }
+.mx-market .mx-swap-btn:hover,
+.mx-market .market-swap-btn:hover {
+  border-color: var(--mx-cyan) !important;
+  background:
+    radial-gradient(110% 120% at 0% 0%, color-mix(in srgb, var(--mx-cyan) 30%, transparent), transparent 68%),
+    color-mix(in srgb, var(--mx-cyan) 14%, var(--mx-panel-2)) !important;
+  transform: none;
+}
+.mx-market .mx-swap-btn:focus-visible,
+.mx-market .market-swap-btn:focus-visible { outline: 2px solid var(--mx-cyan); outline-offset: 3px; }
+:root[data-theme='light'] .mx-market .mx-swap-btn,
+:root[data-theme='light'] .mx-market .market-swap-btn {
+  color: var(--mx-cyan) !important;
+  border-color: color-mix(in srgb, var(--mx-cyan) 48%, transparent) !important;
+  background: color-mix(in srgb, var(--mx-cyan) 10%, #ffffff) !important;
+}
+
+/* 11.2 · A DESK, NOT A PHONE COLUMN
+   Two caps made the laptop view feel folded: the shell stopped at 1280/1440
+   and the token list stopped at 790 inside it. The shell now uses the room a
+   laptop actually has, and the list is allowed to fill that shell. The fixed
+   nav keeps its own dock width; only the reading surface grows. */
+@media (min-width: 1080px) {
+  .app-shell.app-shell--market-home,
+  .app-shell.app-shell--market-home > .top-bar {
+    max-width: min(1560px, calc(100% - 48px)) !important;
+  }
+  .app-shell--market-home .mx-market { max-width: none !important; }
+  .mx-market .mx-table-wrap,
+  .mx-market .mx-coin-row { max-width: min(1320px, 100%) !important; }
+  .mx-market .mx26-dock { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mx-market .mx-swap-btn,
+  .mx-market .market-swap-btn { width: 34px; min-width: 34px; height: 34px; min-height: 34px; }
+}
+@media (min-width: 1480px) {
+  .app-shell.app-shell--market-home,
+  .app-shell.app-shell--market-home > .top-bar {
+    max-width: min(1680px, calc(100% - 96px)) !important;
+  }
+  .mx-market .mx-table-wrap,
+  .mx-market .mx-coin-row { max-width: 1440px !important; }
+}
+@media (max-width: 620px) {
+  .mx-market .mx-swap-btn,
+  .mx-market .market-swap-btn { width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
+}
+
+/* 11.3 · THE BOTTOM PROMOTION — ONE Hairline, ONE Accent, ONE Action
+   Earlier passes stacked a conic beam, a whale photograph, a radar sweep and
+   three shadows on this row. The route already has a hero for spectacle; the
+   promotion only has to be a calm, modern invitation to /global. */
+.mx-market .mx-smart-banner.mx-global-banner {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--mx-r-section) !important;
+  background:
+    radial-gradient(90% 140% at 0% 0%, color-mix(in srgb, var(--mx-cyan) 12%, transparent), transparent 62%) padding-box,
+    radial-gradient(85% 140% at 100% 100%, color-mix(in srgb, var(--mx-violet) 12%, transparent), transparent 64%) padding-box,
+    var(--mx-panel) padding-box,
+    linear-gradient(120deg, color-mix(in srgb, var(--mx-cyan) 55%, transparent), color-mix(in srgb, var(--mx-violet) 45%, transparent) 56%, color-mix(in srgb, var(--mx-gold) 42%, transparent)) border-box !important;
+  box-shadow: 0 16px 34px -30px rgba(1, 7, 18, .9) !important;
+  isolation: isolate;
+  overflow: hidden;
+}
+.mx-market .mx-smart-banner.mx-global-banner::before,
+.mx-market .mx-smart-banner.mx-global-banner::after,
+.mx-market .mx-smart-banner .mx-smart-sheen,
+.mx-market .mx-smart-banner .mx-smart-ring,
+.mx-market .mx-smart-banner .mx-smart-radar,
+.mx-market .mx-smart-banner .mx-global-pulse { display: none !important; }
+.mx-market .mx-smart-banner .mx-smart-main {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+.mx-market .mx-smart-banner .mx-smart-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: 1px solid color-mix(in srgb, var(--mx-cyan) 38%, transparent);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--mx-cyan) 12%, transparent);
+  box-shadow: none;
+  color: var(--mx-cyan);
+}
+.mx-market .mx-smart-banner .mx-smart-copy { min-width: 0; }
+.mx-market .mx-smart-banner .mx-smart-copy h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 720;
+  letter-spacing: -.012em;
+  color: var(--mx-text) !important;
+}
+.mx-market .mx-smart-banner .mx-smart-copy p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mx-muted) !important;
+}
+.mx-market .mx-smart-banner .mx-smart-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--mx-violet) 38%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--mx-violet) 12%, transparent);
+  color: var(--mx-text) !important;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: none;
+}
+.mx-market .mx-smart-banner .mx-smart-cta svg { color: var(--mx-cyan); }
+.mx-market .mx-smart-banner .mx-smart-cta:hover,
+.mx-market .mx-smart-banner .mx-smart-cta:focus-visible {
+  border-color: var(--mx-violet);
+  background: color-mix(in srgb, var(--mx-violet) 18%, transparent);
+}
+.mx-market .mx-smart-banner .mx-smart-cta::after { display: none !important; }
+:root[data-theme='light'] .mx-market .mx-smart-banner.mx-global-banner {
+  background:
+    radial-gradient(90% 140% at 0% 0%, color-mix(in srgb, var(--mx-cyan) 8%, transparent), transparent 62%) padding-box,
+    radial-gradient(85% 140% at 100% 100%, color-mix(in srgb, var(--mx-violet) 8%, transparent), transparent 64%) padding-box,
+    var(--mx-panel) padding-box,
+    linear-gradient(120deg, color-mix(in srgb, var(--mx-cyan) 42%, transparent), color-mix(in srgb, var(--mx-violet) 34%, transparent) 56%, color-mix(in srgb, var(--mx-gold) 34%, transparent)) border-box !important;
+  box-shadow: 0 14px 30px -28px rgba(35, 55, 100, .5) !important;
+}
+@media (max-width: 620px) {
+  .mx-market .mx-smart-banner.mx-global-banner {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .mx-market .mx-smart-banner .mx-smart-cta { width: 100%; }
+}
+
+/* 11.4 · TOKEN CARDS — the same glass language, one quiet rim
+   The card is a translucent layered plate with a hairline rim and a top
+   specular edge. No blur, no loop: it costs the same to scroll as the flat
+   plate it replaces, but reads as a single designed object. */
+.mx-market .mx-coin-row > .coin-row {
+  padding: 9px 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--mx-r-control) !important;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--mx-cyan) 10%, transparent), transparent 60%) padding-box,
+    radial-gradient(110% 130% at 100% 100%, color-mix(in srgb, var(--mx-violet) 9%, transparent), transparent 62%) padding-box,
+    var(--mx-glass) padding-box,
+    var(--mx-panel) padding-box,
+    linear-gradient(125deg, color-mix(in srgb, var(--mx-cyan) 38%, transparent), color-mix(in srgb, var(--mx-violet) 28%, transparent) 55%, color-mix(in srgb, var(--mx-gold) 22%, transparent)) border-box !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10), 0 14px 30px -28px rgba(1, 7, 18, .9) !important;
+}
+.mx-market .mx-coin-row:hover > .coin-row {
+  border-color: color-mix(in srgb, var(--mx-cyan) 55%, transparent) !important;
+  transform: none;
+}
+:root[data-theme='light'] .mx-market .mx-coin-row > .coin-row {
+  box-shadow: inset 0 1px 0 #ffffff, 0 12px 28px -26px rgba(35, 55, 100, .5) !important;
+}
+
+/* A reader who asks for less transparency gets the same shapes in solid
+   paint — a hairline rim still separates the card from the page. */
+@media (prefers-reduced-transparency: reduce) {
+  .mx-market .mx-coin-row > .coin-row,
+  .mx-market .mx-smart-banner.mx-global-banner {
+    border-color: var(--mx-line) !important;
+    background: var(--mx-panel) !important;
+  }
+  .mx-market .mx-swap-btn,
+  .mx-market .market-swap-btn { background: var(--mx-panel-2) !important; }
+}
+@media (prefers-contrast: more) {
+  .mx-market .mx-swap-btn,
+  .mx-market .market-swap-btn,
+  .mx-market .mx-smart-banner .mx-smart-cta { border-color: var(--mx-line-strong) !important; }
+}

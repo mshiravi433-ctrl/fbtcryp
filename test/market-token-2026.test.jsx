@@ -231,20 +231,34 @@ describe('۴ و ۶ · کارت توکن شیشه‌ای، باکس سواپ جد
     expect(card.nextElementSibling).toBe(slot);
   });
 
-  it('gives the token card and the swap box the SAME glass recipe', () => {
-    const bare = css().replace(/\/\*[\s\S]*?\*\//g, '');
-    const card = /\.mx-market \.mx-coin-row > \.coin-row \{([\s\S]*?)\n\}/.exec(bare)[1];
-    const slot = /\.mx-market \.mx-swap-slot\[data-available='true'\] \{([\s\S]*?)\n\}/.exec(bare)[1];
-    for (const needle of ['var(--m26-inner)', 'var(--m26-line)', 'var(--m26-bevel)']) {
-      expect(card).toContain(needle);
+  it('leaves ONE surface at the swap icon — the token card keeps the glass', () => {
+    /*
+     * 2026-11-26 update. The earlier pass gave the slot and the button the
+     * same token-sized glass recipe; the reader called that an «تخم مرغی» box
+     * around the icon. The slot is now a transparent layout wrapper and only
+     * the button carries a surface. The token card stays glassy.
+     */
+    const last = readFileSync('src/styles/market-studio.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const slot = /\.mx-market \.mx-swap-slot\[data-available='true'\] \{([\s\S]*?)\n\}/.exec(last)[1];
+    for (const needle of ['padding: 0 !important', 'border: 0 !important', 'background: none !important', 'box-shadow: none !important']) {
       expect(slot).toContain(needle);
     }
-    /* The row wrapper itself is transparent: the two boxes read as two boxes. */
-    expect(bare).toMatch(/\.mx-market \.mx-coin-row \{[\s\S]*?background: none !important/s);
+    const card = [...last.matchAll(/\.mx-market \.mx-coin-row > \.coin-row \{([\s\S]*?)\n\}/g)]
+      .map((m) => m[1]).find((block) => block.includes('var(--mx-glass)'));
+    expect(card).toBeTruthy();
+    expect(card).toContain('border-box');
+    expect(last).toMatch(/\.mx-market \.mx-swap-btn > svg,[\s\S]*?stroke-width: 1\.25/);
   });
 
-  it('caps the token card width on a desktop instead of stretching it', () => {
-    const bare = css().replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(bare).toMatch(/@media \(min-width: 1024px\) \{[\s\S]*?\.mx-market \.mx-coin-row \{ max-width: 790px/s);
+  it('stretches the token list on a laptop instead of capping it at 790px', () => {
+    /*
+     * The old pin protected a 790px cap; that is exactly the «جمع شده» laptop
+     * view reported on 2026-11-26. The last sheet overrides it with a desk-
+     * width measure while the phone keeps its own full-width rows.
+     */
+    const last = readFileSync('src/styles/market-studio.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(last).toMatch(/@media \(min-width: 1080px\) \{[\s\S]*?\.mx-market \.mx-table-wrap,[\s\S]*?max-width: min\(1320px, 100%\) !important/s);
+    expect(last).toMatch(/\.app-shell\.app-shell--market-home[\s\S]*?max-width: min\(1560px, calc\(100% - 48px\)\) !important/s);
+    expect(css()).toMatch(/\.mx-market \.mx-coin-row \{ max-width: 790px/s);
   });
 });
