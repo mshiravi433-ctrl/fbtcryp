@@ -15,6 +15,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_SORT, MARKET_SORTS, freshness, marketBreadth, sortMarketRows } from '../src/lib/marketList.js';
+import { normalizeCoin } from '../src/lib/api.js';
 
 const row = (id, extra = {}) => ({
   id,
@@ -155,4 +156,34 @@ test('freshness is rounded, and stops claiming to be live past 90s', () => {
   /* A clock that runs backwards (device time change) must not print a
      negative age or a wild timestamp. */
   assert.deepEqual(freshness(now + 60_000, now), { seconds: 0, minutes: 0, stale: false });
+});
+
+test('a feed row with no volume does not become the smallest volume', () => {
+  /* normalizeCoin used to write `?? 0` for missing magnitudes. The comparator
+     read that as a real 0, so a row whose volume the feed omitted led every
+     ascending volume sort and appeared as a $0.00 figure under its name. */
+  const known = row('known', { volume: 50, rank: 2 });
+  const unpriced = normalizeCoin({ id: 'no-volume', symbol: 'NV', name: 'No Volume', current_price: 1 });
+  const fromFeed = { ...row('no-volume'), ...unpriced };
+  for (const dir of ['asc', 'desc']) {
+    const ids = sortMarketRows([fromFeed, known], 'volume', dir).map((r) => r.id);
+    assert.equal(ids[0], 'known', `a missing volume parks behind a real one (${dir})`);
+  }
+  assert.equal(sortMarketRows([fromFeed, known], 'volume', 'asc')[1].id, 'no-volume');
+});
+
+test('a normalised row keeps an absent 1h/7d move absent, not zero', () => {
+  const rowFromFeed = normalizeCoin({ id: 'x', symbol: 'X', name: 'X', current_price: 1, total_volume: 10 });
+  assert.equal(rowFromFeed.change1h, null);
+  assert.equal(rowFromFeed.change7d, null);
+  const rows = [
+    { ...row('real'), id: 'real', change1h: 2, change7d: 4 },
+    { ...row('missing'), id: 'missing', change1h: rowFromFeed.change1h, change7d: rowFromFeed.change7d }
+  ];
+  for (const key of ['change1h', 'change7d']) {
+    for (const dir of ['asc', 'desc']) {
+      const ids = sortMarketRows(rows, key, dir).map((r) => r.id);
+      assert.deepEqual(ids, ['real', 'missing'], `${key}/${key} parks unknown moves last`);
+    }
+  }
 });

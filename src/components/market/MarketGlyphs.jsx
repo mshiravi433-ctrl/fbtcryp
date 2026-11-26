@@ -74,6 +74,23 @@ export const GlyphSortAsc = (p) => (
   </svg>
 );
 
+/**
+ * The row's swap mark: two hairlines, not the 1.75-stroke shared icon.
+ *
+ * A market row is 60 cards deep, so the swap affordance has to read at 16px
+ * without becoming a second filled box beside the coin. The arrowheads are
+ * shorter and the strokes thinner than `IconSwap`; the caller passes the
+ * colour through `currentColor`, so the light theme needs no second artwork.
+ */
+export const GlyphSwapSlender = (p) => (
+  <svg {...base} strokeWidth={1.25} {...p}>
+    <path d="M4.5 9h14" />
+    <path d="m15.6 5.9 3.1 3.1-3.1 3.1" />
+    <path d="M19.5 15H5.5" />
+    <path d="m8.4 11.9-3.1 3.1 3.1 3.1" />
+  </svg>
+);
+
 export const GlyphChevron = (p) => (
   <svg {...base} {...p}>
     <path d="m9.5 5.5 6.5 6.5-6.5 6.5" />

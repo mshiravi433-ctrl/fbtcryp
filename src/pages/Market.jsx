@@ -9,15 +9,15 @@ import {
   IconRefresh,
   IconSearch,
   IconSparkle,
-  IconStar,
-  IconSwap
+  IconStar
 } from '../components/Icons';
 import {
   FILTER_GLYPHS,
   GlyphCaretDown,
   GlyphPulse,
   GlyphSortAsc,
-  GlyphSortDesc
+  GlyphSortDesc,
+  GlyphSwapSlender
 } from '../components/market/MarketGlyphs';
 import DecisionOrb from '../components/DecisionOrb';
 import CoinRow from '../components/CoinRow';
@@ -378,14 +378,22 @@ export default function Market() {
       return ['1h', '24h', '7d'].includes(saved || '') ? saved : '24h';
     } catch { return '24h'; }
   });
-  const setHorizon = useCallback((next) => {
+  /* Every control that MOVES the horizon goes through this one writer. The
+     sort menu and the preset chips move it too; if any of them wrote state
+     without the stored value, a reader who picked «۷ روز» there would get 24h
+     back on the next visit while the pill still said 7d. */
+  const rememberHorizon = useCallback((next) => {
     if (!['1h', '24h', '7d'].includes(next)) return;
     setHorizonState(next);
     try { localStorage.setItem('fbt.market.horizon', next); } catch { /* private mode */ }
+  }, []);
+  const setHorizon = useCallback((next) => {
+    if (!['1h', '24h', '7d'].includes(next)) return;
+    rememberHorizon(next);
     setSmartIntent(null);
     setSortKey(next === '1h' ? 'change1h' : next === '7d' ? 'change7d' : 'change');
     setSortDir('desc');
-  }, []);
+  }, [rememberHorizon]);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   /*
    * «فیلتر انتخابی نباشد» — on a fresh page NO chip is pre-selected. The list
@@ -430,10 +438,10 @@ export default function Market() {
     setSortDir(key === 'rank' ? 'asc' : 'desc');
     /* Picking a horizon from the SORT menu moves the selector too, so the pills
        and the order can never describe different windows. */
-    if (key === 'change1h') setHorizonState('1h');
-    else if (key === 'change7d') setHorizonState('7d');
-    else if (key === 'change' || key === 'rank') setHorizonState('24h');
-  }, []);
+    if (key === 'change1h') rememberHorizon('1h');
+    else if (key === 'change7d') rememberHorizon('7d');
+    else if (key === 'change' || key === 'rank') rememberHorizon('24h');
+  }, [rememberHorizon]);
 
   /*
    * ─── TAPPING A COLUMN HEADER ──────────────────────────────────────────────
@@ -475,11 +483,16 @@ export default function Market() {
       return;
     }
     setOnlyFavorites(false);
-    if (view === 'all') { setSortKey('rank'); setSortDir('asc'); return; }
-    if (view === 'gainers') { setSortKey('change'); setSortDir('desc'); return; }
-    if (view === 'losers') { setSortKey('change'); setSortDir('asc'); return; }
+    /* «صعودی‌ها» and «نزولی‌ها» name the 24h move, not whatever window the
+       rail happened to be showing. Without this a reader on «۷ روز» tapped
+       «صعودی‌ها», saw a 7d column and 7d pills, and got a list ranked by
+       24h — the wrong results for the numbers on the screen. Every preset
+       therefore restores the rail it is named after. */
+    if (view === 'all') { rememberHorizon('24h'); setSortKey('rank'); setSortDir('asc'); return; }
+    if (view === 'gainers') { rememberHorizon('24h'); setSortKey('change'); setSortDir('desc'); return; }
+    if (view === 'losers') { rememberHorizon('24h'); setSortKey('change'); setSortDir('asc'); return; }
     if (view === 'volume') { setSortKey('volume'); setSortDir('desc'); }
-  }, []);
+  }, [rememberHorizon]);
 
   /*
    * 60 rows a page, up from 40. Each one is a card with a sparkline and a
@@ -1711,7 +1724,7 @@ export default function Market() {
                               title={t('market.swapOnCorrectNetwork', { symbol: c.symbol })}
                               data-testid={`market-swap-${c.id}`}
                             >
-                              <IconSwap width={12} height={12} aria-hidden="true" />
+                              <GlyphSwapSlender width={16} height={16} />
                               <span className="mx-swap-label">{t('market.swap')}</span>
                             </button>
                           )}
@@ -1795,7 +1808,7 @@ export default function Market() {
                               <span className="mx-swap-slot" data-available={swapUrl ? 'true' : undefined}>
                               {swapUrl && (
                                 <button type="button" className="market-swap-btn mx-swap-btn" aria-label={t('market.swapOnCorrectNetwork', { symbol: c.symbol })} onClick={(e) => { e.stopPropagation(); navigate(swapUrl); }}>
-                                  <IconSwap width={12} height={12} aria-hidden="true" />
+                                  <GlyphSwapSlender width={16} height={16} />
                                   <span className="mx-swap-label">{t('market.swap')}</span>
                                 </button>
                               )}

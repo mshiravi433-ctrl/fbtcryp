@@ -232,6 +232,22 @@ describe('the ordered measure is visible', () => {
     expect(rowIds()[0]).toBe('bitcoin');
   });
 
+  it('sorts the real rows by volume in BOTH directions when the chip and arrow are used', async () => {
+    render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
+    await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole('button', { name: fa.market.filter.volume }));
+    await waitFor(() => expect(rowIds()[0]).toBe('bitcoin')); // 1e10 — highest
+    expect(screen.getByTestId('market-sort-dir').getAttribute('data-dir')).toBe('desc');
+
+    fireEvent.click(screen.getByTestId('market-sort-dir'));
+    await waitFor(() => expect(rowIds()[0]).toBe('coin-0')); // 1e6 — lowest
+    expect(screen.getByTestId('market-sort-dir').getAttribute('data-dir')).toBe('asc');
+    /* Only sixty rows are painted; the last one is the lowest-volume row IN
+       THAT WINDOW, not the global last coin. */
+    expect(rowIds().at(-1)).toBe('coin-59');
+  });
+
   it('says nothing extra when the order is price, which every row already shows', async () => {
     render(<MemoryRouter initialEntries={['/?tab=tokens']}><Market /></MemoryRouter>);
     await waitFor(() => expect(rowIds().length).toBeGreaterThan(0));

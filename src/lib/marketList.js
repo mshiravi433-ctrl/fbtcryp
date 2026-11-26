@@ -99,15 +99,27 @@ export function sortMarketRows(rows, key = 'rank', dir = 'asc') {
     .map((entry) => entry.row);
 }
 
+/**
+ * Magnitudes (volume, market cap) are not signed changes: a feed that omits
+ * one writes 0 in several of our normalisers. Zero is indistinguishable from
+ * "no figure" here, and treating it as a real measurement is what put a row
+ * with no volume at the TOP of an ascending volume sort. `null` parks it at
+ * the end in both directions, where the reader sees it as missing data.
+ */
+function positive(v) {
+  const n = num(v);
+  return n != null && n > 0 ? n : null;
+}
+
 function sortReader(key) {
   switch (key) {
     case 'mcap':
       /* Market cap has a second spelling in this codebase (`marketCap`), and a
          row that came from the sector endpoint is not guaranteed to carry the
          same one as a row from the markets endpoint. Read both. */
-      return (row) => num(row?.mcap) ?? num(row?.marketCap);
+      return (row) => positive(row?.mcap) ?? positive(row?.marketCap);
     case 'volume':
-      return (row) => num(row?.volume) ?? num(row?.totalVolume);
+      return (row) => positive(row?.volume) ?? positive(row?.totalVolume);
     case 'price':
       return (row) => num(row?.price);
     case 'change':
