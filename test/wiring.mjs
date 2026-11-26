@@ -14431,6 +14431,16 @@ export default function run() {
       && /totalValue: portfolio\.totalValue \+ \(btcRow\?\.value \?\? 0\)/.test(walletSrc));
     t('a BTC asset row opens the popup, not an EVM token-detail sheet',
       /chainId === 'btc'\)[\s\S]{0,120}setBtcHubOpen\(true\)/.test(walletSrc));
+    /* The shipped crash: «Cannot access 'ye' before initialization» was the
+       minified name of `connected`. The BTC hook reads it before the old,
+       later declaration — dev transforms hide the TDZ, the production chunk
+       does not. Pin the declaration order inside the Wallet component only;
+       WalHero has its own same-named local which is not in this scope. */
+    const walletBody = walletSrc.slice(walletSrc.indexOf('export default function Wallet()'));
+    const connectedDecl = walletBody.indexOf('const connected = Boolean(wallet.address) && !wallet.locked;');
+    const btcHookCall = walletBody.indexOf('useBtcHolding({');
+    t('the BTC hook reads `connected` after its declaration (no production TDZ)',
+      connectedDecl > -1 && btcHookCall > -1 && connectedDecl < btcHookCall);
 
     /* i18n: every new key, in the primary market's language too. */
     const enJson = JSON.parse(read('src/i18n/locales/en.json'));

@@ -813,6 +813,11 @@ export default function Wallet() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { haptic } = useTelegram();
   const wallet = useWallet();
+  /* Declared before the BTC hook below: that hook's `enabled` flag reads it
+     on this very first render. Keeping the old, later declaration here was a
+     temporal dead zone — invisible in dev transforms, fatal in the minified
+     production chunk («Cannot access '…' before initialization»). */
+  const connected = Boolean(wallet.address) && !wallet.locked;
   const currencyCode = useSettingsStore((s) => s.currency);
   const toggleSetting = useSettingsStore((s) => s.toggle);
   const currency = currencyOf(currencyCode);
@@ -986,8 +991,6 @@ export default function Wallet() {
   const [pnlSheet, setPnlSheet] = useState(false);
   const [optimizeSheet, setOptimizeSheet] = useState(false);
   const [nftChip, setNftChip] = useState({ state: 'unknown' });
-
-  const connected = Boolean(wallet.address) && !wallet.locked;
 
   useEffect(() => {
     if (wallet.chainId && wallet.isConnected) setSelectedChain(wallet.chainId);
