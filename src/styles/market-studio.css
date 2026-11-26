@@ -1,0 +1,497 @@
+/* FBT MARKET · THE STUDIO PASS — 2026-11-26
+   ===========================================================================
+   Requested: «بهترین و مدرن ترین ui,ux را برای صفحه بازار هر دو تب مرور و
+   توKEN بازطراحی کن» — the best modern UI/UX for BOTH tabs, without changing a
+   number, a label, a filter or a route.
+
+   ─── WHY THIS IS A SHEET, NOT ANOTHER REWRITE ─────────────────────────────
+   This route already carries nine design passes. Each one added a palette and
+   a material; the result is a screen with FOUR competing accents in the token
+   tab alone, five different corner treatments and a card padding that changes
+   from box to box. Rewriting those files would break the tests that protect
+   each pass and erase the reason each decision was made. So this is a single
+   LAST layer: it re-grades the tokens the earlier layers already read, and it
+   sets the rhythm of the two panels. Nothing earlier is deleted.
+
+   ─── THREE DECISIONS ──────────────────────────────────────────────────────
+   1 · ONE VOICE. The token tab's `--m26-*` scale is folded onto the market's
+      own two voices (cyan, violet) plus its warm end (gold). Every gradient,
+      rim and chip written in earlier passes keeps working, but stops arguing.
+   2 · ONE GRID. On a wide screen the overview tab is a bento: the reading
+      spans the page, stories and the heatmap sit side by side, the intelligence
+      rail and the banner close it. On a phone nothing changes except the
+      spacing. The source order is untouched — screen readers still read in the
+      same order.
+   3 · ONE PACE. Gaps, radii and paddings come from the four-tier surface scale.
+      Headings get a real type ramp and figures get tabular numerals. No new
+      keyframes, no blur, no mask, no filter, no will-change: the scroll budget
+      that was measured on this page stays exactly as cheap as it was.
+
+   ─── WHAT IT DOES NOT DO ──────────────────────────────────────────────────
+   No fetch, no state, no translation key, no component is added. Every value
+   printed on this screen still comes from the same feed and the same state.
+   =========================================================================== */
+
+.mx-market {
+  /* A single rhythm for the whole route. `surface` is the gap between cards,
+     `tight` the gap inside one. Both step down on a phone. */
+  --ms-gap: 16px;
+  --ms-gap-tight: 10px;
+  --ms-gap-wide: 22px;
+  --ms-accent: var(--mx-cyan);
+  --ms-accent-alt: var(--mx-violet);
+  --ms-ink: var(--mx-text);
+  --ms-quiet: var(--mx-muted);
+  --ms-line: var(--mx-line);
+  --ms-line-strong: var(--mx-line-strong);
+  --ms-surface: var(--mx-glass), var(--mx-panel);
+  --ms-well: var(--mx-well);
+  --ms-elevate: 0 22px 46px -34px rgba(1, 7, 18, .9), var(--mx-hi);
+  gap: var(--ms-gap);
+}
+
+/* ── 1 · THE TOKEN TAB'S PALETTE, FOLDED ONTO THE ROUTE ────────────────────
+   The four-voice ribbon in market-token-2026.css is the reason the tokens tab
+   reads as a different product from the overview tab. Re-grade the tokens, not
+   the two hundred declarations that consume them: aqua becomes the market's
+   cyan, indigo its violet, violet the same cyan at a different point in the
+   gradient, amber its warm end. The plate, the rim and every chip inherit the
+   change without one of them being touched. */
+.mx-market .mx-tab-panel {
+  --m26-a: var(--mx-cyan);
+  --m26-b: var(--mx-violet);
+  --m26-c: var(--mx-cyan);
+  --m26-d: var(--mx-gold);
+  --m26-ink: var(--mx-text);
+  --m26-muted: var(--mx-muted);
+  --m26-line: var(--mx-line);
+  --m26-line-strong: var(--mx-line-strong);
+  --m26-plate-a: var(--mx-panel-2);
+  --m26-plate-b: var(--mx-panel);
+  --m26-rim: linear-gradient(125deg, var(--mx-cyan), var(--mx-violet) 52%, var(--mx-gold));
+  --m26-lift: var(--ms-elevate);
+  --m26-bevel: var(--mx-hi);
+}
+/* The light token sheet declares its palette with a theme selector, so this
+   re-grade must carry the same selector — a plain rule would lose to it in
+   the light theme and leave the two themes with different accents again. */
+:root[data-theme='light'] .mx-market .mx-tab-panel {
+  --m26-a: var(--mx-cyan);
+  --m26-b: var(--mx-violet);
+  --m26-c: var(--mx-cyan);
+  --m26-d: var(--mx-gold);
+  --m26-ink: var(--mx-text);
+  --m26-muted: var(--mx-muted);
+  --m26-line: var(--mx-line);
+  --m26-line-strong: var(--mx-line-strong);
+  --m26-plate-a: var(--mx-panel-2);
+  --m26-plate-b: var(--mx-panel);
+  --m26-rim: linear-gradient(125deg, var(--mx-cyan), var(--mx-violet) 52%, var(--mx-gold));
+  --m26-lift: var(--ms-elevate);
+  --m26-bevel: var(--mx-hi);
+}
+
+/* ── 2 · THE TWO TABS ──────────────────────────────────────────────────────
+   The plate's transform and RTL sign stay where they are (market-tabs.css);
+   only the type and the width of the control change. A wider pill reads as a
+   destination, not as a toggle buried in the page. */
+.mx-market .mx-tabs {
+  max-width: 480px;
+  border-radius: 18px;
+}
+.mx-market .mx-tabs-thumb { border-radius: 14px; }
+.mx-market .mx-tab {
+  min-height: 44px;
+  padding-inline: 14px;
+}
+.mx-market .mx-tab-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  text-wrap: balance;
+}
+
+/* ── 3 · OVERVIEW — A BENTO ON A WIDE SCREEN ───────────────────────────────
+   DOM order is the reading order; the grid only decides where the boxes sit
+   once there is room for two columns. The closed panel keeps `display: none`
+   from market-tabs.css — this rule is scoped to the open overview panel. */
+@media (min-width: 1080px) {
+  .mx-market #market-panel-overview:not([hidden]) {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
+    align-items: stretch;
+    gap: var(--ms-gap-wide);
+  }
+  .mx-market #market-panel-overview:not([hidden]) > .mx-overview,
+  .mx-market #market-panel-overview:not([hidden]) > .mx-intel-rail,
+  .mx-market #market-panel-overview:not([hidden]) > .mx-smart-banner {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ── 4 · THE SHARED SURFACE SCALE ──────────────────────────────────────────
+   The same four boxes on both tabs: one border weight, one radius tier, one
+   inset. Decoration from earlier passes is left alone — it sits above these
+   backgrounds and still draws the same light. */
+.mx-market .mx-overview,
+.mx-market .mx-stories,
+.mx-market .mx-heatmap,
+.mx-market .mx-intel-rail,
+.mx-market .mx-smart-banner,
+.mx-market .mx-hot,
+.mx-market .mx-lens,
+.mx-market .mx-terminal {
+  min-width: 0;
+  border: 1px solid var(--ms-line) !important;
+  border-radius: var(--mx-r-section) !important;
+  background: var(--ms-surface) !important;
+  box-shadow: var(--ms-elevate) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.mx-market .mx-overview {
+  gap: var(--ms-gap) !important;
+  padding: var(--ms-gap) !important;
+}
+.mx-market .mx-stories,
+.mx-market .mx-heatmap,
+.mx-market .mx-intel-rail,
+.mx-market .mx-smart-banner,
+.mx-market .mx-hot,
+.mx-market .mx-lens,
+.mx-market .mx-terminal {
+  padding: var(--ms-gap) !important;
+}
+
+/* The shell around the story reel is a layout, not a second card. */
+.mx-market .mx-stories .market-stories-section {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* ── 5 · THE DECK AND THE BITCOIN FACE ─────────────────────────────────────
+   Two hero cards on one flip stage. Align their insets with the surface scale
+   and give the numbers a type ramp that survives translation: the currency
+   mark is quiet, the digits lead, the magnitude is a superscript. */
+.mx-market .mx-flip-bar {
+  padding: 4px;
+  border: 1px solid var(--ms-line);
+  background: var(--ms-well);
+}
+.mx-market .mx-flip-tab {
+  min-height: 34px;
+  padding-inline: 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ms-quiet);
+}
+.mx-market .mx-flip-tab.is-active,
+.mx-market .mx-flip-tab[aria-selected='true'] {
+  color: var(--ms-ink);
+  background: color-mix(in srgb, var(--ms-accent) 14%, var(--mx-panel-2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+
+.mx-market .mx-deck,
+.mx-market .mx-btc-card {
+  padding: var(--mx-pad-hero) !important;
+  border: 1px solid var(--ms-line) !important;
+  border-radius: var(--mx-r-hero) !important;
+  background: var(--ms-surface) !important;
+  box-shadow: var(--ms-elevate) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.mx-market .mx-deck-head,
+.mx-market .mx-btc-head {
+  gap: 10px;
+  padding-block-end: 12px;
+  border-block-end: 1px solid var(--mx-line-soft);
+}
+.mx-market .mx-deck-title,
+.mx-market .mx-terminal-title,
+.mx-market .mx-section-head h2 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.012em;
+  text-wrap: balance;
+}
+.mx-market .mx-kicker,
+.mx-market .mx-deck-eyebrow,
+.mx-market .mx-btc-id-text small {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ms-quiet);
+}
+
+.mx-market .mx-global-value { margin-block: 6px 2px; }
+.mx-market .mx-global-figure,
+.mx-market .mx-btc-price {
+  font-variant-numeric: tabular-nums;
+  font-weight: 760;
+  letter-spacing: -.05em;
+  line-height: 1.04;
+}
+.mx-market .mx-global-figure { font-size: clamp(34px, 5vw, 56px); }
+.mx-market .mx-btc-price { font-size: clamp(30px, 4.5vw, 46px); }
+.mx-market .mx-fig-mark { font-size: .5em; font-weight: 600; opacity: .78; }
+.mx-market .mx-fig-unit { font-size: .46em; font-weight: 650; letter-spacing: 0; }
+
+.mx-market .mx-global-metrics,
+.mx-market .mx-trio--in-flip {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ms-gap-tight) !important;
+  margin-block-start: 14px !important;
+}
+.mx-market .mx-metric,
+.mx-market .mx-trio-box {
+  min-width: 0;
+  padding: 12px !important;
+  border: 1px solid var(--mx-line-soft) !important;
+  border-radius: var(--mx-r-control) !important;
+  background: var(--mx-well) !important;
+  box-shadow: var(--mx-hi) !important;
+}
+.mx-market .mx-metric-label,
+.mx-market .mx-trio-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--ms-quiet);
+}
+.mx-market .mx-metric-value,
+.mx-market .mx-trio-value {
+  font-size: clamp(15px, 2vw, 20px);
+  font-weight: 720;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.03em;
+}
+.mx-market .mx-btc-delta { gap: var(--ms-gap-tight); }
+.mx-market .mx-btc-stats { gap: var(--ms-gap-tight); margin-block-start: 14px; }
+
+/* ── 6 · THE INTELLIGENCE RAIL ─────────────────────────────────────────────
+   Three reports behind one segmented control. The active report gets the same
+   plate as the page tabs, so a reader sees one navigation language. */
+.mx-market .mx-intel-rail-bar {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--mx-line-soft);
+  border-radius: 999px;
+  background: var(--mx-well);
+}
+.mx-market .mx-intel-rail-tab {
+  min-height: 36px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ms-quiet);
+}
+.mx-market .mx-intel-rail-tab.is-active,
+.mx-market .mx-intel-rail-tab[aria-selected='true'] {
+  color: var(--ms-ink);
+  background: color-mix(in srgb, var(--ms-accent) 12%, var(--mx-panel-2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1);
+}
+.mx-market .mx-intel-rail-panel { padding-block-start: 12px; }
+
+/* ── 7 · THE TOKEN TAB — HOT RAIL ──────────────────────────────────────────
+   A ranked discovery tape. Snap points make a swipe land on a card; the rail
+   keeps its own scrollbar invisible on touch without hiding it on desktop. */
+.mx-market .mx-section-head {
+  gap: 8px;
+  padding-block-end: 12px;
+  border-block-end: 1px solid var(--mx-line-soft);
+}
+.mx-market .mx-section-head h2 { margin: 0; }
+.mx-market .mx-hot-rail {
+  gap: 12px;
+  padding-block: 12px 4px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-inline: contain;
+}
+.mx-market .mx-hot-card {
+  width: 152px;
+  min-height: 146px;
+  padding: 12px !important;
+  border-radius: var(--mx-r-control) !important;
+  scroll-snap-align: start;
+}
+.mx-market .mx-hot-id b { font-size: 13px; }
+.mx-market .mx-hot-price { font-size: 18px; font-weight: 720; }
+.mx-market .mx-hot-chart { height: 34px; }
+.mx-market .mx-hot-volume { font-size: 10px; }
+
+/* ── 8 · THE TOKEN TAB — THE LIST ──────────────────────────────────────────
+   One command surface: title, search, three dropdowns, then the view chips.
+   The controls keep their own roles (radio group, menu, toggle group); only
+   their alignment and breathing room change. */
+.mx-market .mx-list-hero {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: var(--ms-gap-tight) !important;
+}
+.mx-market .mx-list-title {
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 720;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+}
+.mx-market .market-count {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+}
+.mx-market .mx-search {
+  min-height: 50px !important;
+  border-radius: var(--mx-r-control) !important;
+}
+.mx-market .mx-search-input {
+  font-size: 14px;
+  font-weight: 500;
+}
+.mx-market .mx-search-input::placeholder { color: var(--ms-quiet); }
+
+.mx-market .mx26-dock {
+  gap: var(--ms-gap-tight);
+  margin-block-start: 4px;
+}
+.mx-market .mx26-field {
+  padding: 9px 10px 10px;
+  border-radius: 14px;
+}
+.mx-market .mx26-field-label {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ms-quiet);
+}
+.mx-market .mx26-field-trigger {
+  min-height: 32px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.mx-market .mx-controls.mx26-chips { margin-block-start: 10px; }
+.mx-market .mx26-chips .mx-view { min-height: 38px; }
+
+/* The breadth reading sits in a recessed well inside the lens, with the same
+   radius language as the controls around it. */
+.mx-market .mx-breadth {
+  padding: 14px;
+  border: 1px solid var(--mx-line-soft);
+  border-radius: var(--mx-r-control);
+  background: var(--mx-well);
+}
+.mx-market .mx-breadth-bar {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.mx-market .mx-breadth-title { font-size: 12px; font-weight: 650; }
+.mx-market .mx-breadth-legend { gap: 12px; flex-wrap: wrap; }
+
+/* Row typography: the price is the loudest thing in a row and the rank is the
+   quietest. The row itself stays one pointer target with a border-only hover
+   (the benchmark pass owns that interaction). */
+.mx-market .mx-coin-row > .coin-row {
+  font-variant-numeric: tabular-nums;
+}
+.mx-market .mx-coin-row .coin-price {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+.mx-market .mx-coin-row .coin-symbol,
+.mx-market .mx-coin-row .coin-name {
+  font-size: 13px;
+  font-weight: 650;
+}
+.mx-market .coin-change-pill {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ── 9 · NARROW SCREENS ────────────────────────────────────────────────────
+   The phone keeps one column, tighter insets and full-width tap targets.
+   Logical properties keep the same result in RTL. */
+@media (max-width: 1079px) {
+  .mx-market { --ms-gap: 14px; --ms-gap-wide: 14px; }
+}
+@media (max-width: 620px) {
+  .mx-market { --ms-gap: 12px; --ms-gap-tight: 8px; }
+  .mx-market .mx-overview,
+  .mx-market .mx-stories,
+  .mx-market .mx-heatmap,
+  .mx-market .mx-intel-rail,
+  .mx-market .mx-smart-banner,
+  .mx-market .mx-hot,
+  .mx-market .mx-lens,
+  .mx-market .mx-terminal {
+    padding: 12px !important;
+    border-radius: 18px !important;
+  }
+  .mx-market .mx-deck,
+  .mx-market .mx-btc-card { padding: 14px !important; border-radius: 20px !important; }
+  .mx-market .mx-global-metrics,
+  .mx-market .mx-trio--in-flip { gap: 6px !important; }
+  .mx-market .mx-metric,
+  .mx-market .mx-trio-box { padding: 9px !important; }
+  .mx-market .mx-metric-value,
+  .mx-market .mx-trio-value { font-size: 15px; }
+  .mx-market .mx-hot-card { width: 146px; scroll-snap-align: center; }
+  .mx-market .mx26-dock { grid-template-columns: 1fr; }
+  .mx-market .mx26-field-trigger { min-height: 36px; }
+  .mx-market .mx-tabs { max-width: none; }
+  .mx-market .mx-tab { min-height: 46px; }
+}
+
+/* ── 10 · USER PREFERENCES ─────────────────────────────────────────────────
+   Every transition this sheet adds is a paint property; a reader who asked
+   for less motion gets none of them. More contrast and less transparency get
+   a solid panel and a real hairline rather than a translucent one. */
+@media (prefers-reduced-motion: reduce) {
+  .mx-market .mx-tab,
+  .mx-market .mx-flip-tab,
+  .mx-market .mx-intel-rail-tab,
+  .mx-market .mx26-field-trigger {
+    transition: none !important;
+  }
+}
+@media (prefers-contrast: more) {
+  .mx-market .mx-overview,
+  .mx-market .mx-stories,
+  .mx-market .mx-heatmap,
+  .mx-market .mx-intel-rail,
+  .mx-market .mx-smart-banner,
+  .mx-market .mx-hot,
+  .mx-market .mx-lens,
+  .mx-market .mx-terminal,
+  .mx-market .mx-deck,
+  .mx-market .mx-btc-card {
+    border-color: var(--mx-line-strong) !important;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .mx-market .mx-overview,
+  .mx-market .mx-stories,
+  .mx-market .mx-heatmap,
+  .mx-market .mx-intel-rail,
+  .mx-market .mx-smart-banner,
+  .mx-market .mx-hot,
+  .mx-market .mx-lens,
+  .mx-market .mx-terminal,
+  .mx-market .mx-deck,
+  .mx-market .mx-btc-card {
+    background: var(--mx-panel) !important;
+  }
+}
