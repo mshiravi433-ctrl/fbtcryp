@@ -1187,9 +1187,11 @@ export default function Wallet() {
       />
       )}
 
-      <InfoBox title={t('wallet.custodyTitle')} tone="info" id="wallet-custody">
-        <p>{t('wallet.custodyNotice')}</p>
-      </InfoBox>
+      {tab !== 'solana' && (
+        <InfoBox title={t('wallet.custodyTitle')} tone="info" id="wallet-custody">
+          <p>{t('wallet.custodyNotice')}</p>
+        </InfoBox>
+      )}
 
       {/* Token detail (from the unified asset list) */}
       <TokenDetailSheet
@@ -1220,16 +1222,6 @@ export default function Wallet() {
         portfolio={displayPortfolio}
         wallet={wallet}
       />
-
-      {/* Optimize explainer — why no draft was prefilled */}
-      <Sheet open={optimizeSheet} onClose={() => setOptimizeSheet(false)} title={t('wallet.optimize')} anchor="bottom">
-        <div className="stack" style={{ gap: 12 }}>
-          <p className="notice">{t('wallet.optimizeExplain')}</p>
-          <button className="btn btn-primary" style={{ minHeight: 46, borderRadius: 14 }} onClick={() => { setOptimizeSheet(false); navigate('/intent?tab=compose'); }}>
-            {t('wallet.optimizeOpenManual')}
-          </button>
-        </div>
-      </Sheet>
 
       {/* Seed reveal sheet */}
       <Sheet

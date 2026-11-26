@@ -42,14 +42,26 @@ import WalletCommandSheet from '../src/components/wallet/WalletCommandSheet.jsx'
 import WalletOptimizeSheet from '../src/components/wallet/WalletOptimizeSheet.jsx';
 
 describe('wallet command surfaces', () => {
-  it('opens a single sheet with every tab and the Smart Wallet door', () => {
+  it('opens only the overview panel and the Smart Wallet door', () => {
     render(<WalletCommandSheet open onClose={() => {}} portfolio={{ rows: [], chains: [], totalValue: 0 }} intel={null} />);
     const root = document.body;
     expect(root.querySelector('[data-testid="wallet-command-sheet"]')).toBeTruthy();
     expect(root.querySelector('[data-testid="wallet-command-smart"]')).toBeTruthy();
-    for (const key of ['overview', 'opportunity', 'risk', 'pnl', 'security', 'defi', 'nft', 'alerts']) {
-      expect(root.textContent).toContain(en.wnew.tab[key]);
+    expect(root.querySelector('[role="tablist"]')).toBeNull();
+    expect(root.textContent).toContain(en.wnew.netWorth);
+    expect(root.querySelectorAll('[role="tab"]')).toHaveLength(0);
+    for (const marker of ['opportunityTitle', 'opt', 'pnlByAsset', 'securityDeep', 'defiTitle', 'nftTitle', 'alertsTitle']) {
+      const value = marker === 'opt' ? en.wnew.opt.findings : en.wnew[marker];
+      expect(root.textContent).not.toContain(value);
     }
+    cleanup();
+  });
+
+  it('opens only the P&L panel when the P&L tile is tapped', () => {
+    render(<WalletCommandSheet open initialTab="pnl" onClose={() => {}} portfolio={{ rows: [], chains: [], totalValue: 0 }} intel={null} />);
+    expect(document.body.querySelector('[role="tablist"]')).toBeNull();
+    expect(document.body.textContent).toContain(en.wnew.pnlByAsset);
+    expect(document.body.textContent).not.toContain(en.wnew.netWorth);
     cleanup();
   });
 

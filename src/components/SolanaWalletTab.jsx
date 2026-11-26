@@ -13,7 +13,6 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import InfoBox from './InfoBox';
 import SolanaConnectSheet from './SolanaConnectSheet';
 import SolanaWalletHome from './SolanaWalletHome';
 import { useWallet, shortAddress } from '../context/WalletContext';
@@ -282,61 +281,78 @@ export default function SolanaWalletTab() {
           </button>
         </section>
       )}
-      {/* One expandable comparison. The explainer below keeps its own box. */}
-      <details id="solana-wallet-which" className="card sol-wal-both">
-        <summary className="sol-wal-both-sum">{t('solana.twoWalletsTitle')}</summary>
-        <p className="muted" style={{ fontSize: 12.3, margin: '8px 0 11px', lineHeight: 1.8 }}>
-          {t('solana.twoWalletsBody')}
-        </p>
-        <div className="stack" style={{ gap: 9 }}>
-          <div className="row-between">
-            <span className="row" style={{ gap: 7 }}>
-              <span className="dot" style={{ background: evm?.address ? 'var(--up)' : 'var(--text-3)' }} />
-              <span style={{ fontSize: 12.5 }}>{t('solana.evmSide')}</span>
-            </span>
-            <span className="mono faint" style={{ fontSize: 11.5 }}>
-              {evm?.address ? shortAddress(evm.address) : t('solana.notConnected')}
-            </span>
-          </div>
-          <div className="row-between">
-            <span className="row" style={{ gap: 7 }}>
-              <span className="dot" style={{ background: address ? 'var(--up)' : 'var(--text-3)' }} />
-              <span style={{ fontSize: 12.5 }}>{t('solana.solSide')}</span>
-            </span>
-            <span className="mono faint" style={{ fontSize: 11.5 }}>
-              {address ? shortAddress(address) : t('solana.notConnected')}
-            </span>
-          </div>
-        </div>
-        <p className="prose-sm" style={{ marginTop: 12 }}>{t('solana.noNeedToDisconnect')}</p>
-      </details>
-
-      {/* ─── the three connection paths ─────────────────────────────────── */}
-      <InfoBox title={t('solana.whichTitle')} tone="info" id="solana-wallet-which">
-        <p>{t('solana.whichIntro')}</p>
-        <div className="stack" style={{ gap: 8, marginTop: 10 }}>
-          {['phantom', 'solflare', 'backpack'].map((w) => (
-            <div key={w} className="row" style={{ gap: 9, alignItems: 'flex-start' }}>
-              <span className="wallet-badge" style={{ width: 26, height: 26, fontSize: 11, flexShrink: 0 }} aria-hidden="true">
-                {t(`solana.wallets.${w}.short`)}
-              </span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 12.5 }}>{t(`solana.wallets.${w}.name`)}</div>
-                <p className="prose-sm" style={{ marginTop: 2 }}>{t(`solana.wallets.${w}.desc`)}</p>
+      {/*
+        ONE modern, default-closed note box for all three explanations that
+        used to stack at the bottom of the Solana wallet. Keeping them in a
+        single collapsible box preserves the copy and the deep-link id while giving
+        the balance and the actions the whole screen.
+      */}
+      <details id="solana-wallet-which" className="card sol-wal-both sol-wal-notes">
+        <summary className="sol-wal-both-sum">{t('solana.walletNotesTitle')}</summary>
+        <div className="sol-wal-notes-body">
+          <section className="sol-wal-note">
+            <h3>{t('solana.twoWalletsTitle')}</h3>
+            <p className="muted" style={{ fontSize: 12.3, margin: '7px 0 11px', lineHeight: 1.8 }}>
+              {t('solana.twoWalletsBody')}
+            </p>
+            <div className="stack" style={{ gap: 9 }}>
+              <div className="row-between">
+                <span className="row" style={{ gap: 7 }}>
+                  <span className="dot" style={{ background: evm?.address ? 'var(--up)' : 'var(--text-3)' }} />
+                  <span style={{ fontSize: 12.5 }}>{t('solana.evmSide')}</span>
+                </span>
+                <span className="mono faint" style={{ fontSize: 11.5 }}>
+                  {evm?.address ? shortAddress(evm.address) : t('solana.notConnected')}
+                </span>
+              </div>
+              <div className="row-between">
+                <span className="row" style={{ gap: 7 }}>
+                  <span className="dot" style={{ background: address ? 'var(--up)' : 'var(--text-3)' }} />
+                  <span style={{ fontSize: 12.5 }}>{t('solana.solSide')}</span>
+                </span>
+                <span className="mono faint" style={{ fontSize: 11.5 }}>
+                  {address ? shortAddress(address) : t('solana.notConnected')}
+                </span>
               </div>
             </div>
-          ))}
+            <p className="prose-sm" style={{ marginTop: 12 }}>{t('solana.noNeedToDisconnect')}</p>
+          </section>
+
+          <section className="sol-wal-note">
+            <h3>{t('solana.whichTitle')}</h3>
+            <p className="prose-sm">{t('solana.whichIntro')}</p>
+            <div className="stack" style={{ gap: 8, marginTop: 10 }}>
+              {['phantom', 'solflare', 'backpack'].map((w) => (
+                <div key={w} className="row" style={{ gap: 9, alignItems: 'flex-start' }}>
+                  <span className="wallet-badge" style={{ width: 26, height: 26, fontSize: 11, flexShrink: 0 }} aria-hidden="true">
+                    {t(`solana.wallets.${w}.short`)}
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12.5 }}>{t(`solana.wallets.${w}.name`)}</div>
+                    <p className="prose-sm" style={{ marginTop: 2 }}>{t(`solana.wallets.${w}.desc`)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p style={{ marginTop: 12, fontWeight: 700, fontSize: 12.5 }}>{t('solana.howTitle')}</p>
+            <ol className="p2p-steps">
+              {['desktop', 'android', 'ios', 'app'].map((k) => (
+                <li key={k}>{t(`solana.how.${k}`)}</li>
+              ))}
+            </ol>
+            <p className="notice notice-danger" style={{ marginTop: 10 }}>
+              {t('solana.notSolana')}
+            </p>
+          </section>
+
+          <section className="sol-wal-note" id="wallet-custody">
+            <h3>{t('wallet.custodyTitle')}</h3>
+            <p className="muted" style={{ fontSize: 12.3, lineHeight: 1.8, margin: '7px 0 0' }}>
+              {t('wallet.custodyNotice')}
+            </p>
+          </section>
         </div>
-        <p style={{ marginTop: 12, fontWeight: 700, fontSize: 12.5 }}>{t('solana.howTitle')}</p>
-        <ol className="p2p-steps">
-          {['desktop', 'android', 'ios', 'app'].map((k) => (
-            <li key={k}>{t(`solana.how.${k}`)}</li>
-          ))}
-        </ol>
-        <p className="notice notice-danger" style={{ marginTop: 10 }}>
-          {t('solana.notSolana')}
-        </p>
-      </InfoBox>
+      </details>
 
       {/* The approval surface itself — the screen that was missing. */}
       <SolanaConnectSheet
