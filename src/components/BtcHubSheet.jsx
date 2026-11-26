@@ -1,38 +1,41 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import qrcode from 'qrcode-generator';
 import Sheet from './Sheet';
 import { useStill } from './AnimatedIcon';
 import { IconBitcoin } from './WalletArt';
-import { IconCheck, IconChevronRight, IconPlus, IconRefresh, IconX } from './Icons';
+import { IconCheck, IconCopy, IconPlus, IconRefresh, IconX } from './Icons';
 import { btcAddressInfo } from '../lib/btcAddress';
 import { getBtcAddressInfo } from '../lib/btcApi';
+import { getThorQuote, toThorUnits } from '../lib/thorswap';
+import { DUST_SATS } from '../lib/btcTx';
 import { addWatch, loadWatch, removeWatch, saveWatch, MAX_WATCH, MAX_LABEL } from '../lib/btcWatch';
+import { useBtcHolding } from '../hooks/useBtcHolding';
+import { useAppStore } from '../store/useAppStore';
 import { fmtNum, fmtQty } from '../lib/format';
+import BtcSendSheet from './BtcSendSheet';
 
 /**
- * THE BITCOIN POPUP — the wallet action row's bitcoin doorway.
+ * THE BITCOIN POPUP — the ONLY doorway to the wallet's bitcoin leg.
  * ---------------------------------------------------------------------------
- * Two things live here, and they are deliberately the only two:
+ * The static card at the bottom of the wallet page is gone. Everything a real
+ * bitcoin wallet has to do now happens in this sheet:
  *
- *  1. A POINTER to this wallet's own bitcoin card, which is further down the
- *     same page. Not a copy of it — a copy would mount a second BtcCard and
- *     double every balance request for a card the user can already see.
+ *  1. OWN WALLET — the m/84' address of the unlocked local vault, its live
+ *     balance, a receive QR, a real signed SEND (BtcSendSheet), and the THOR-
+ *     Chain BTC → BTCB route into the EVM leg.
  *
- *  2. WATCH-ONLY addresses: public bitcoin addresses the user holds somewhere
- *     else, showing balance and UTXO count and nothing more.
+ *  2. WATCH-ONLY addresses — public addresses held elsewhere, showing balance
+ *     and UTXO count and nothing more. They are never spendable from here.
  *
- * ─── WHY THIS COMPONENT KNOWS NOTHING ABOUT KEYS ────────────────────────────
- * It imports lib/btcWatch (labels + addresses), lib/btcAddress (the shared
- * mainnet validator) and lib/btcApi (our own read-only proxy). It does NOT
- * import lib/btcWallet or lib/btcTx, and it cannot: there is no spend path
- * through this screen, so the derivation and signing code has no reason to be
- * in this chunk and the import-graph rule in the wiring suite keeps it out.
+ * The own-wallet read comes from useBtcHolding, the SAME hook the wallet's
+ * asset row uses. One derivation, one /api/btc/address read, one truth.
  *
- * The lock state is passed IN as a prop by the Wallet page, which already has
- * the wallet context, rather than derived here — that is what lets this file
- * stay free of the bitcoin wallet module while still telling a locked user the
- * truth.
+ * Keys are still never held by THIS component: the send sheet takes an
+ * in-memory signer from the unlocked vault, signs, broadcasts and drops the
+ * reference. The lock state is passed IN by the Wallet page, so a locked user
+ * gets a sentence rather than an empty balance.
  *
  * ─── NETWORK DISCIPLINE (the BtcCard pattern) ───────────────────────────────
  * Balances are fetched only while the sheet is OPEN, once per open plus an
@@ -45,9 +48,91 @@ import { fmtNum, fmtQty } from '../lib/format';
 
 const FETCH_GAP_MS = 120;
 
-export default function BtcHubSheet({ open, onClose, vaultState = 'none', onOpenCard }) {
+export default function BtcHubSheet({ open, onClose, vaultState = 'none', getSigner = null, account = null, refreshKey = 0 }) {
   const { t } = useTranslation();
   const still = useStill();
+  const notify = useAppStore((st) => st.notify);
+  const unlocked = vaultState === 'unlocked';
+
+  /* Shared with the wallet's BTC asset row — no second derivation, no second
+     upstream read when the popup opens. */
+  const holding = useBtcHolding({ enabled: open && unlocked, getSigner, account, refreshKey });
+  const address = holding.address;
+  const sats = (v) => (typeof v === 'number' ? fmtNum(v, 0) : '—');
+  const confirmed = holding.balance?.confirmedSats ?? 0;
+  const convertible = confirmed > DUST_SATS;
+
+  const [copied, setCopied] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendPrefill, setSendPrefill] = useState(null);
+  const [convertBusy, setConvertBusy] = useState(false);
+  const [convertError, setConvertError] = useState(null);
+
+  /* The receive QR is built from the derived address only while the sheet is
+     open. The same encoder and quiet-zone as ReceiveSheet/BtcCard: an SVG path
+     that stays sharp on a phone and carries no remote asset. */
+  const qrPath = useMemo(() => {
+    if (!open || !address) return null;
+    try {
+      const q = qrcode(0, 'M');
+      q.addData(address);
+      q.make();
+      const count = q.getModuleCount();
+      let d = '';
+      for (let r = 0; r < count; r += 1) {
+        for (let c = 0; c < count; c += 1) {
+          if (q.isDark(r, c)) d += `M${c} ${r}h1v1h-1z`;
+        }
+      }
+      return { d, count };
+    } catch {
+      return null;
+    }
+  }, [open, address]);
+
+  const copy = useCallback(async () => {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      notify('addressCopied', 'success');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      notify('copyFailed', 'error');
+    }
+  }, [address, notify]);
+
+  /* BTC → BTCB stays the honest next step for money that is ALREADY bitcoin:
+     the THORChain quote supplies the inbound address and OP_RETURN memo, and
+     BtcSendSheet signs the exact sweep. No swap-route cannibalisation. */
+  const convert = async () => {
+    if (convertBusy || !convertible || !address || !account) return;
+    setConvertBusy(true);
+    setConvertError(null);
+    try {
+      const feeReserve = Math.ceil(251 * Number(holding.fees?.normal ?? 12));
+      const amountBtc = Math.max(0, (confirmed - feeReserve) / 1e8);
+      const amount = toThorUnits(amountBtc.toFixed(8));
+      if (!amount || Number(amount) <= 0) throw new Error('AMOUNT_TOO_SMALL');
+      const quote = await getThorQuote({
+        from: 'BTC.BTC',
+        to: 'BSC.BTCB-1DE',
+        amount,
+        destination: account
+      });
+      if (!quote?.inbound_address || !quote?.memo) throw new Error('QUOTE_INCOMPLETE');
+      setSendPrefill({
+        recipient: String(quote.inbound_address).trim(),
+        memo: String(quote.memo).trim(),
+        thor: { out: quote.expected_amount_out ?? null, dest: account }
+      });
+      setSendOpen(true);
+    } catch (err) {
+      setConvertError(err?.message || 'QUOTE_FAILED');
+    } finally {
+      setConvertBusy(false);
+    }
+  };
 
   const [list, setList] = useState([]);
   const [balances, setBalances] = useState({}); /* address -> {sats, utxos} | {failed:true} */
@@ -148,6 +233,7 @@ export default function BtcHubSheet({ open, onClose, vaultState = 'none', onOpen
   const short = (a) => (a.length > 22 ? `${a.slice(0, 12)}…${a.slice(-8)}` : a);
 
   return (
+    <>
     <Sheet open={open} onClose={onClose} title={t('btc.hub.title')} anchor="center" size="lg">
       <div className="stack" style={{ gap: 14 }}>
         {/* ------------------------- this app's wallet ------------------------ */}
@@ -168,16 +254,89 @@ export default function BtcHubSheet({ open, onClose, vaultState = 'none', onOpen
             </span>
           </div>
 
-          {vaultState === 'unlocked' ? (
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ width: '100%', minHeight: 46, borderRadius: 14, gap: 8 }}
-              onClick={() => { onClose?.(); onOpenCard?.(); }}
-            >
-              {t('btc.hub.openCard')}
-              <IconChevronRight width={15} height={15} />
-            </button>
+          {unlocked ? (
+            <>
+              <div className="row-between" style={{ alignItems: 'flex-end', gap: 8 }}>
+                <div>
+                  <div className="mono" style={{ fontSize: 18, fontWeight: 800 }}>
+                    {holding.balance ? `${fmtQty(confirmed / 1e8)} BTC` : (holding.loading ? '…' : '—')}
+                  </div>
+                  <div className="faint mono" style={{ fontSize: 10.5 }}>
+                    {holding.balance ? `${sats(confirmed)} sats` : ''}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ borderRadius: 12 }}
+                  onClick={() => void holding.refresh()}
+                  aria-label={t('common.refresh')}
+                >
+                  <IconRefresh width={13} height={13} />
+                </button>
+              </div>
+
+              {holding.balance?.unconfirmedSats > 0 ? (
+                <p className="notice" style={{ margin: '8px 0 0', fontSize: 11 }}>
+                  {t('btc.card.incoming', { sats: sats(holding.balance.unconfirmedSats) })}
+                </p>
+              ) : null}
+
+              {address ? (
+                <div className="row" style={{ gap: 10, marginTop: 10, alignItems: 'center' }}>
+                  {qrPath && (
+                    <div style={{ flexShrink: 0, width: 66, height: 66, padding: 4, background: '#fff', borderRadius: 10 }}>
+                      <svg viewBox={`0 0 ${qrPath.count} ${qrPath.count}`} width="100%" height="100%" shapeRendering="crispEdges" role="img" aria-label={t('btc.card.title')}>
+                        <path d={qrPath.d} fill="#000" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="mono" dir="ltr" style={{ flex: 1, fontSize: 10.5, wordBreak: 'break-all', lineHeight: 1.7 }}>
+                    {(address.match(/.{1,4}/g) ?? []).join(' ')}
+                  </div>
+                  <button type="button" className="btn btn-ghost btn-sm" style={{ borderRadius: 12 }} onClick={copy} aria-label={t('btc.card.copy')}>
+                    {copied ? <IconCheck width={14} height={14} /> : <IconCopy width={14} height={14} />}
+                  </button>
+                </div>
+              ) : (
+                <p className="faint" style={{ fontSize: 11.5, margin: '8px 0 0' }}>
+                  {holding.error ? t(`btc.card.err.${holding.error}`, { defaultValue: t('btc.card.note') }) : '…'}
+                </p>
+              )}
+
+              <div className="row" style={{ gap: 8, marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ flex: 1, minHeight: 44, borderRadius: 13 }}
+                  disabled={!address || confirmed <= 0}
+                  onClick={() => { setSendPrefill(null); setSendOpen(true); }}
+                >
+                  {t('btc.card.send')}
+                </button>
+                {convertible ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ flex: 1.3, minHeight: 44, borderRadius: 13 }}
+                    disabled={convertBusy}
+                    onClick={convert}
+                  >
+                    {convertBusy ? t('btc.card.converting') : t('btc.card.convert')}
+                  </button>
+                ) : null}
+              </div>
+
+              {convertError ? (
+                <p className="notice notice-danger" role="alert" style={{ margin: '10px 0 0', fontSize: 11.5 }}>
+                  {t(`btc.card.err.${convertError}`, { defaultValue: t('btc.card.err.QUOTE_FAILED') })}
+                </p>
+              ) : (
+                <p className="faint" style={{ margin: '8px 0 0', fontSize: 10.5, lineHeight: 1.7 }}>
+                  {t(convertible ? 'btc.card.convertNote' : 'btc.card.note')}
+                </p>
+              )}
+            </>
           ) : (
             <p className="notice" style={{ margin: 0, fontSize: 11.5 }}>
               {vaultState === 'locked' ? t('btc.hub.locked') : t('btc.hub.noVault')}
@@ -354,5 +513,11 @@ export default function BtcHubSheet({ open, onClose, vaultState = 'none', onOpen
         </motion.div>
       </div>
     </Sheet>
+    <BtcSendSheet
+      open={sendOpen}
+      onClose={() => { setSendOpen(false); setSendPrefill(null); setConvertError(null); }}
+      prefill={sendPrefill}
+    />
+    </>
   );
 }

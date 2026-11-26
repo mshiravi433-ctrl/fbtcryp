@@ -11,6 +11,12 @@
  * run in, expressed as one auditable pipeline with an explicit stage log.
  */
 
+/* The Smart Wallet's LOCAL policy is the policy Intent OS obeys: raising a cap
+   on the Smart Wallet screen and ignoring it here was the whole bypass this
+   default gate closes. It never imports an LLM, a signer or a network client. */
+import { checkPolicy as checkSmartWalletPolicy } from '../../../smartWallet.js';
+import { loadIntentMemory } from '../../../intentOS.js';
+
 export const SAFETY_SCHEMA = 'fbt.action-safety.v7';
 
 export const STAGE = Object.freeze({
@@ -34,7 +40,7 @@ const SECRET_PATTERNS = [
   /\b([a-z]{3,10}\s+){11}[a-z]{3,10}\b/i                    // 12-word phrase
 ];
 
-const SENSITIVE_KEYS = /^(privatekey|private_key|pk|seed|seedphrase|mnemonic|secret|signingkey|kmskey|apisecret)$/i;
+const SENSITIVE_KEYS = /^(privatekey|private_key|pk|seed|seedphrase|mnemonic|secret|signingkey|kmskey|apisecret|sessionkey)$/i;
 
 /** Never let a secret reach an LLM prompt or client-side AI context (§46). */
 export function scrubForAI(value, depth = 0) {
@@ -137,6 +143,56 @@ function stageResult(stage, ok, detail = {}) {
 }
 
 /**
+ * THE DEFAULT POLICY GATE — fail closed on the user's own rules.
+ *
+ * A caller may inject a stricter gate; it may NOT omit one and inherit a pass.
+ * The three user-facing controls are read from the same local policy the Smart
+ * Wallet screen edits:
+ *
+ *   · لیست مجاز مقصد  — `to` must be on the allowlist whenever one exists;
+ *   · مخاطبان بازیابی اجتماعی — a recovery request must name only guardians;
+ *   · کلید نشست      — an intent using the session's raised caps must carry
+ *                      the exact key minted when the session started.
+ *
+ * The session key may come from the action, the execution context, or the
+ * Intent OS memory the user filled in on the Smart Wallet screen — never from
+ * the policy itself, which is the thing being checked.
+ */
+export function defaultIntentPolicyGate({ intent = null, action = null, context = {} } = {}) {
+  const pick = (...values) => {
+    for (const value of values) {
+      if (value === null || value === undefined || value === '') continue;
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+    return 0;
+  };
+  const usd = pick(
+    action?.usd, action?.amountUsd, action?.valueUsd, intent?.usd, intent?.amountUsd, context?.usd
+  );
+  const to = action?.to || action?.destination || action?.recipient || intent?.to || context?.to || null;
+  const sessionKey = action?.sessionKey || context?.sessionKey || intent?.sessionKey || loadIntentMemory().sessionKey || null;
+  const recovery = action?.recovery || context?.recovery || intent?.recovery || null;
+  const origin = action?.origin || context?.origin || 'intent';
+  const decision = checkSmartWalletPolicy({ usd, to, sessionKey, recovery, origin });
+  if (!decision.ok) {
+    return {
+      allowed: false,
+      reason: decision.code,
+      code: decision.code,
+      policy: decision,
+      message: ({
+        NOT_ALLOWLISTED: 'This destination is not on your allowed list.',
+        SESSION_KEY_REQUIRED: 'Start a session and enter its key before Intent OS uses the raised limit.',
+        BAD_SESSION_KEY: 'The session key did not match this session.',
+        NOT_A_GUARDIAN: 'A recovery recipient is not on your social-recovery list.'
+      })[decision.code] || 'The Smart Wallet policy refused this action.'
+    };
+  }
+  return { allowed: true, policy: decision, checked: { usd, to, recovery: Boolean(recovery), origin } };
+}
+
+/**
  * Runs the safety gates in the mandated order and STOPS at the first refusal.
  * Every gate is injected — this module owns the order, not the logic.
  *
@@ -166,11 +222,13 @@ export async function runSafetyPipeline({
   stages.push(stageResult(STAGE.INTENT, true, { type: intent.type || intent.primaryIntent }));
 
   // 2 POLICY
-  if (typeof gates.checkPolicy === 'function') {
-    const p = await safeCall(gates.checkPolicy, { intent, action, context });
+  {
+    const p = typeof gates.checkPolicy === 'function'
+      ? await safeCall(gates.checkPolicy, { intent, action, context })
+      : await safeCall(defaultIntentPolicyGate, { intent, action, context });
     if (!p.ok || p.value?.allowed === false) return fail(STAGE.POLICY, p.value?.reason || 'POLICY_DENIED', { policy: p.value });
     stages.push(stageResult(STAGE.POLICY, true, { policy: p.value }));
-  } else stages.push(stageResult(STAGE.POLICY, true, { skipped: 'NO_POLICY_GATE' }));
+  }
 
   // 3 RISK
   let risk = null;

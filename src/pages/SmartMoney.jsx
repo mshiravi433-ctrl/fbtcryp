@@ -24,7 +24,7 @@ import SmartMoneyIntelligence, { IntelligenceTeaser, VerifiedWallets } from '../
 import { readWhalesOnToken, readSolanaWhales, readSolanaWallets } from '../lib/whaleEngine';
 import { readFreshWallets } from '../lib/freshWallets';
 import { readWatchlist, nextToRead } from '../lib/walletTracking';
-import { getSolanaWhales } from '../lib/solTrack';
+import { getSolanaWhales, invalidateSolTrack, isSolanaAddress, saveWatchedAddress } from '../lib/solTrack';
 import CopyTradeButton from '../components/smart-money/CopyTradeButton';
 import TokenIcon from '../lib/tokenIcon';
 
@@ -1121,6 +1121,11 @@ export default function SmartMoney() {
                   </section>
                 )}
 
+                {/* Solana is not a footnote on an EVM board. The SAME cached
+                    whale payload the whales tab reads is shown here too, so a
+                    reader landing on Smart Money sees it without hunting. */}
+                <SolanaOverviewCard t={t} navigate={navigate} />
+
                 <p className="smx-disclaimer smx-disclaimer--foot">{t('sm.disclaimer')}</p>
               </>
             )}
@@ -1196,6 +1201,81 @@ function FlowSummary({ flows, window: win = '24h', onMore, t, m, streamDown }) {
         <div className="smx-inline-empty">{t('sm.noLabelledFlow')}</div>
       )}
     </section>
+  );
+}
+
+/**
+ * ─── SOLANA ON THE OVERVIEW TAB ─────────────────────────────────────────────
+ * «سولانا اسمارت مانی واقعاً کار بکند و در اسمارت مانی باشد»
+ *
+ * The Solana whale/wallet sections used to live ONLY under the Whales tab.
+ * A reader who landed on Smart Money's default overview saw an EVM-only board
+ * and reasonably concluded the Solana code was not there. This card puts the
+ * same real feed on the first screen. It makes ONE read through `solTrack`,
+ * which already de-duplicates for two minutes on the client and 15 minutes at
+ * the CDN; it does not start a second poll.
+ */
+function SolanaOverviewCard({ t, navigate }) {
+  const [watch, setWatch] = useState(null);
+  const [state, setState] = useState('loading');
+  useEffect(() => {
+    let on = true;
+    getSolanaWhales('usd')
+      .then((out) => {
+        if (!on) return;
+        setWatch(out?.ok ? out.data : null);
+        setState(out?.ok ? 'done' : (out?.code || 'NETWORK'));
+      })
+      .catch(() => { if (on) setState('NETWORK'); });
+    return () => { on = false; };
+  }, []);
+
+  const read = useMemo(() => (watch ? readSolanaWhales({ watch }) : null), [watch]);
+  const top = read?.measured && watch?.transfers?.length ? watch.transfers[0] : null;
+
+  return (
+    <div className="smx-solover" data-testid="sm-solana-overview">
+      <div className="smx-solwhale-head">
+        <span className="smx-solwhale-ico" aria-hidden="true"><SmWavesGlyph width={14} height={14} /></span>
+        <b>{t('sm.solWhalesTitle')}</b>
+        <span className="smx-solover-open">
+          <button type="button" onClick={() => navigate('/smart-money?tab=whales')}>
+            {t('sm.solWhaleOpenTab', { defaultValue: 'همه نهنگ‌ها' })}
+          </button>
+        </span>
+      </div>
+      {read?.measured ? (
+        <>
+          <p className="smx-solwhale-lean" dir="auto">{t('sm.solWhaleMoved', { n: Math.round(read.solMoved).toLocaleString() })}</p>
+          <p className="smx-solwhale-note">{t('sm.solWhaleCoverage', {
+            n: watch?.coverage?.blocksPerRefresh ?? 0,
+            reused: watch?.coverage?.sampleMs ? Math.round(watch.coverage.sampleMs / 60_000) : 20
+          })}</p>
+          {top && isSolanaAddress(top.to) && (
+            <button
+              type="button"
+              className="smx-solwhale-track"
+              data-testid="sm-solana-overview-track"
+              onClick={() => {
+                saveWatchedAddress(top.to);
+                invalidateSolTrack();
+                navigate(`/smart-wallet?track=${encodeURIComponent(top.to)}`);
+              }}
+            >
+              {t('sm.solTrackWhale')}
+            </button>
+          )}
+        </>
+      ) : (
+        <p className="smx-solwhale-note">
+          {state === 'loading'
+            ? '…'
+            : (watch?.available === false || state !== 'done'
+              ? t('sm.solWhaleUnavailable')
+              : t('sm.solWhaleEmpty'))}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -1304,7 +1384,7 @@ function WhalesTab({ navigate, t, smart }) {
           />
         ))}
       </div>
-      <SolanaWhaleCard t={t} watch={solWatch} state={solState} />
+      <SolanaWhaleCard t={t} watch={solWatch} state={solState} navigate={navigate} />
       <SolanaWallets
         t={t}
         read={solWallets}
@@ -1335,7 +1415,7 @@ function WhalesTab({ navigate, t, smart }) {
  * feed renders its REASON — an empty whale list is not the same claim as "the
  * node did not answer".
  */
-function SolanaWhaleCard({ t, watch, state }) {
+function SolanaWhaleCard({ t, watch, state, navigate }) {
   const read = useMemo(() => (watch ? readSolanaWhales({ watch }) : null), [watch]);
   if (state === 'loading' && !read) return null;
   /* Nothing to say and nothing measured: stay silent rather than print an
@@ -1392,6 +1472,25 @@ function SolanaWhaleCard({ t, watch, state }) {
                   <i aria-hidden="true">→</i>
                   {row.toLabel || (row.to ? shortAddr(row.to, 'solana') : '—')}
                 </span>
+                {/* A whale row is a lead, not a dead statistic: tracking the
+                    wallet has a real effect — Smart Wallet reads its live
+                    balance and last 25 signatures. Only base-58 wallets get
+                    the button; a labelled venue is not an address here. */}
+                {isSolanaAddress(row.to) && (
+                  <button
+                    type="button"
+                    className="smx-solwhale-track"
+                    data-testid="sm-solana-track-whale"
+                    onClick={() => {
+                      saveWatchedAddress(row.to);
+                      invalidateSolTrack();
+                      navigate(`/smart-wallet?track=${encodeURIComponent(row.to)}`);
+                    }}
+                    title={t('sm.solTrackWhale')}
+                  >
+                    {t('sm.solTrackWhale')}
+                  </button>
+                )}
               </li>
             ))}
           </ul>

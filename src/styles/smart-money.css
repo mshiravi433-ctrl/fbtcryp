@@ -2243,6 +2243,55 @@
   opacity: 0.6;
 }
 
+/* «ردیابی این کیف پول» — a real action on a real whale address. Compact by
+   design: this sits in a five-row sample, not in the tap-target grid. */
+.smx-solwhale-track {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  min-width: 0;
+  min-height: 28px;
+  padding: 3px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--sm-line, rgba(255,255,255,0.14));
+  background: rgba(110, 231, 183, 0.08);
+  color: var(--sm-ink);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.smx-solwhale-track:hover { background: rgba(110, 231, 183, 0.16); }
+
+/* Solana on the default Smart Money overview — a compact sibling of the
+   whales-tab card, with a direct doorway to the full board. */
+.smx-solover {
+  margin: 14px 0;
+  padding: 13px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--sm-line, rgba(255,255,255,0.12));
+  background: rgba(110, 231, 183, 0.045);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+}
+.smx-solover .smx-solwhale-head { width: 100%; }
+.smx-solover-open { margin-inline-start: auto; }
+.smx-solover-open button {
+  min-height: 30px;
+  min-width: 0;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--sm-line, rgba(255,255,255,0.14));
+  background: transparent;
+  color: var(--sm-ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+.smx-solover .smx-solwhale-lean { margin: 0; font-size: 12px; }
+.smx-solover .smx-solwhale-note { margin: 0; }
+
 .smx-solwhale-note {
   font-size: 9px;
   line-height: 1.7;

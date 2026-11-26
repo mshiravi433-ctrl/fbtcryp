@@ -12,7 +12,6 @@ import { useTelegram } from '../context/TelegramContext';
 import WalletConnectSheet from '../components/WalletConnectSheet';
 import SendSheet from '../components/SendSheet';
 import ReceiveSheet from '../components/ReceiveSheet';
-import BtcCard from '../components/BtcCard';
 import BtcHubSheet from '../components/BtcHubSheet';
 import WalletActionRow from '../components/WalletActionRow';
 import WalletIntelTiles from '../components/WalletIntelTiles';
@@ -27,6 +26,7 @@ import { currencyOf } from '../lib/currency';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { useHideBalances } from '../hooks/useHideBalances';
 import { useMultiChainPortfolio } from '../hooks/useMultiChainPortfolio';
+import { useBtcHolding } from '../hooks/useBtcHolding';
 import { useAppStore } from '../store/useAppStore';
 import { exportWallet, shareWalletBackup, BACKUP_FILENAME } from '../lib/walletBackup';
 import { revealMnemonic } from '../lib/localWallet';
@@ -575,9 +575,8 @@ function WalHero({
   );
 }
 
-function ChainBreakdown({ portfolio, activeChainId, onSelect, selectedChain, t, currency, hideBalances = false }) {
+function ChainBreakdown({ portfolio, activeChainId, t, currency, hideBalances = false }) {
   const chains = portfolio.chains || [];
-  const selected = selectedChain === 'all' ? null : selectedChain;
   /* A chain's share of the hero total — the same figures, one division.
      Withheld while balances are hidden (proportions leak allocation even
      when amounts do not), and on errored chains that contributed nothing. */
@@ -595,11 +594,7 @@ function ChainBreakdown({ portfolio, activeChainId, onSelect, selectedChain, t, 
         <span className="walx-sec-count">{chains.length} {t('wallet.networksUnit')}</span>
       </div>
       <div className="wal-chain-grid">
-        <button
-          type="button"
-          className={`wal-chain-row ${selected === null ? 'is-active' : ''}`}
-          onClick={() => onSelect('all')}
-        >
+        <div className="wal-chain-row" role="listitem">
           <span className="walx-chain-ico" aria-hidden="true"><IconGlobe width={18} height={18} /></span>
           <span className="walx-chain-main">
             <strong>{t('wallet.allNetworks')}</strong>
@@ -608,17 +603,15 @@ function ChainBreakdown({ portfolio, activeChainId, onSelect, selectedChain, t, 
           <span className="walx-chain-fig">
             <span className="walx-chain-val mono">{fmtCurrencyValue(portfolio.totalValue, currency)}</span>
           </span>
-        </button>
+        </div>
         {chains.map((c) => {
           const isActive = activeChainId === c.chainId;
-          const isSelected = selected === c.chainId;
           const pct = shareOf(c);
           return (
-            <button
-              type="button"
+            <div
               key={c.chainId}
-              className={`wal-chain-row ${isSelected ? 'is-active' : ''}`}
-              onClick={() => onSelect(c.chainId)}
+              className="wal-chain-row"
+              role="listitem"
               style={{ '--chip-color': c.chainColor }}
             >
               {/* The network's own vendored SVG mark — the same artwork the
@@ -651,7 +644,7 @@ function ChainBreakdown({ portfolio, activeChainId, onSelect, selectedChain, t, 
                 </span>
                 {pct != null && <span className="walx-chain-pct mono">{pct < 0.1 ? '<0.1' : pct.toFixed(1)}%</span>}
               </span>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -780,9 +773,11 @@ function AssetList({ portfolio, selectedChain, onSelect, onOpenToken, t, currenc
                     <strong className="wal-asset-sym" dir="auto" title={g.symbol}>{g.displaySymbol}</strong>
                     {g.items.map((r) => {
                       const c = EVM_CHAINS[r.chainId];
+                      const short = c?.short || (r.chainId === 'btc' ? 'BTC' : null);
+                      if (!short) return null;
                       return (
-                        <span key={r.chainId} className="wal-chip-net" style={{ background: c?.color ? `${c.color}22` : 'rgba(255,255,255,0.06)', color: c?.color || 'var(--text-2)' }}>
-                          {c?.short}
+                        <span key={r.chainId} className="wal-chip-net" style={{ background: c?.color ? `${c.color}22` : 'rgba(247,147,26,0.16)', color: c?.color || '#f7931a' }}>
+                          {short}
                         </span>
                       );
                     })}
@@ -832,6 +827,51 @@ export default function Wallet() {
   }, [haptic, toggleSetting]);
 
   const portfolio = useMultiChainPortfolio(wallet);
+
+  /*
+   * BITCOIN IS AN ASSET HERE, NOT A DECORATION.
+   *
+   * The wallet's own BIP-84 leg is read once through useBtcHolding — the same
+   * hook the popup uses — and folded into the DISPLAY portfolio below. It is
+   * deliberately not added to the EVM hook: `chains` there drive switching and
+   * an EVM provider, while BTC is spendable only through its own sheet. The
+   * hero total, the asset list and the P&L view all see the same row, priced
+   * from the same market list as every other holding.
+   */
+  const bitcoinAvailable = wallet.mode === 'local';
+  const btcHolding = useBtcHolding({
+    enabled: bitcoinAvailable && connected,
+    getSigner: wallet.getSigner,
+    account: wallet.address
+  });
+
+  const displayPortfolio = useMemo(() => {
+    const price = Number(portfolio.marketRows?.find((c) => c.id === 'bitcoin')?.price);
+    const btcAmount = btcHolding.balance ? btcHolding.balance.confirmedSats / 1e8 : null;
+    const btcRow = btcAmount != null && btcAmount > 0 ? {
+      key: 'btc:native',
+      chainId: 'btc',
+      symbol: 'BTC',
+      name: 'Bitcoin',
+      address: null,
+      native: true,
+      decimals: 8,
+      amount: btcAmount,
+      price: Number.isFinite(price) ? price : null,
+      value: Number.isFinite(price) ? btcAmount * price : null,
+      chainShort: 'BTC',
+      chainColor: '#f7931a',
+      bitcoin: true
+    } : null;
+    const rows = btcRow ? [...portfolio.rows, btcRow] : portfolio.rows;
+    return {
+      ...portfolio,
+      rows,
+      totalValue: portfolio.totalValue + (btcRow?.value ?? 0),
+      totalCount: rows.length,
+      btc: btcRow
+    };
+  }, [portfolio, btcHolding.balance]);
 
   const [sendOpen, setSendOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
@@ -968,7 +1008,8 @@ export default function Wallet() {
   const handleRefresh = useCallback(() => {
     wallet.refreshBalance?.();
     portfolio.refresh?.();
-  }, [wallet, portfolio]);
+    if (bitcoinAvailable) void btcHolding.refresh?.();
+  }, [wallet, portfolio, btcHolding.refresh, bitcoinAvailable]);
 
   /*
    * P&L / intelligence from the local lot ledger + live holdings. Always
@@ -982,10 +1023,10 @@ export default function Wallet() {
    * connect its wallet. One verified read, painted everywhere.
    */
   const intel = useMemo(() => buildIntelligence({
-    holdings: portfolio.rows.map((r) => ({
+    holdings: displayPortfolio.rows.map((r) => ({
       symbol: r.symbol, name: r.name, value: r.value, amount: r.amount, chainId: r.chainId, native: r.native
     }))
-  }), [portfolio.rows]);
+  }), [displayPortfolio.rows]);
 
   /* Real NFT count for the hero chip — from /api/nft, or an honest "not scanned". */
   useEffect(() => {
@@ -1014,33 +1055,30 @@ export default function Wallet() {
     return () => { alive = false; };
   }, [connected, wallet.address, wallet.chainId]);
 
-  const canOptimize = connected && portfolio.rows.length > 0 && portfolio.totalValue > 0;
-
-  /*
-   * Bitcoin is derived from the INTERNAL local vault seed (BIP-84) only. A
-   * wallet connected through WalletConnect / an injected provider (Trust
-   * Wallet, MetaMask, …) has no BTC leg: show nothing for it — no action
-   * row button, no card, no popup. `bitcoinAvailable` is what the BTC token
-   * detail / card / sheet all read instead of re-deriving the mode each time.
-   */
-  const bitcoinAvailable = wallet.mode === 'local';
+  const canOptimize = connected && displayPortfolio.rows.length > 0 && displayPortfolio.totalValue > 0;
 
   const handleOptimize = useCallback(() => {
     haptic?.('select');
     if (!connected) { setConnectOpen(true); return; }
     if (!canOptimize) { setOptimizeSheet(true); return; }
-    const priced = [...portfolio.rows].filter((r) => r.value != null).sort((a, b) => b.value - a.value);
+    const priced = [...displayPortfolio.rows].filter((r) => r.value != null).sort((a, b) => b.value - a.value);
     const top = priced[0];
     if (!top) { setOptimizeSheet(true); return; }
-    const native = portfolio.rows.find((r) => r.chainId === wallet.chainId && r.native);
+    const native = displayPortfolio.rows.find((r) => r.chainId === wallet.chainId && r.native);
     let from = top.symbol;
     let to = from === 'USDC' ? 'ETH' : 'USDC';
     if (native && from === native.symbol) to = 'USDC';
     navigate(`/intent?tab=compose&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&chain=${wallet.chainId}`);
-  }, [haptic, connected, canOptimize, portfolio.rows, wallet.chainId, navigate]);
+  }, [haptic, connected, canOptimize, displayPortfolio.rows, wallet.chainId, navigate]);
 
   const handleOpenToken = useCallback((group) => {
     haptic?.('select');
+    /* Bitcoin is not an EVM token: its row opens the same popup as the icon
+       instead of a token-detail sheet built for chainId/contract swaps. */
+    if (group?.items?.[0]?.chainId === 'btc') {
+      setBtcHubOpen(true);
+      return;
+    }
     setTokenGroup(group);
     setTokenSheet(true);
   }, [haptic]);
@@ -1066,11 +1104,11 @@ export default function Wallet() {
      route: swap that token for native when gas is too low. */
   const gasSwapTarget = useMemo(() => {
     if (!wallet.chainId) return null;
-    const onChain = (portfolio.rows || [])
+    const onChain = (displayPortfolio.rows || [])
       .filter((r) => r.chainId === wallet.chainId && !r.native && r.value != null)
       .sort((a, b) => b.value - a.value);
     return onChain[0]?.symbol ?? null;
-  }, [portfolio.rows, wallet.chainId]);
+  }, [displayPortfolio.rows, wallet.chainId]);
 
   const heroApi = {
     onSend: () => setSendOpen(true),
@@ -1121,7 +1159,7 @@ export default function Wallet() {
           <WalHero
             wallet={wallet}
             currency={currency}
-            portfolio={portfolio}
+            portfolio={displayPortfolio}
             intel={intel}
             chips={{ nft: nftChip }}
             hideBalances={hideBalances}
@@ -1153,10 +1191,8 @@ export default function Wallet() {
 
               <div className="walx-rise" style={{ marginTop: 14, '--walx-d': '190ms' }}>
                 <ChainBreakdown
-                  portfolio={portfolio}
+                  portfolio={displayPortfolio}
                   activeChainId={wallet.chainId}
-                  onSelect={handleSelectChain}
-                  selectedChain={selectedChain}
                   t={t}
                   currency={currency}
                   hideBalances={hideBalances}
@@ -1165,7 +1201,7 @@ export default function Wallet() {
 
               <div className="walx-rise" style={{ marginTop: 14, '--walx-d': '240ms' }}>
                 <AssetList
-                  portfolio={portfolio}
+                  portfolio={displayPortfolio}
                   selectedChain={selectedChain}
                   onSelect={handleSelectChain}
                   onOpenToken={handleOpenToken}
@@ -1212,13 +1248,6 @@ export default function Wallet() {
         </div>
       )}
 
-      {/* ----------------- internal bitcoin (same seed, BIP-84) -----------------
-          Only the local vault can grow a BTC leg (zero law), and the card
-          itself renders nothing for injected/locked wallets — so this line is
-          a no-op for everyone who has no internal BTC wallet. It lives in the
-          Wallet chunk only; no other route pulls it in. */}
-      <div id="wallet-btc-card">{bitcoinAvailable && tab === 'real' && <BtcCard />}</div>
-
       {/* ----------------- Solana wallet -----------------
           Connection through Phantom / Solflare / Backpack belongs on the
           wallet page; the swap page keeps only quoting and execution. */}
@@ -1248,16 +1277,8 @@ export default function Wallet() {
         open={btcHubOpen}
         onClose={() => setBtcHubOpen(false)}
         vaultState={wallet.mode === 'local' ? (wallet.locked ? 'locked' : 'unlocked') : 'none'}
-        onOpenCard={() => {
-          /* The card is already on this page; scroll rather than duplicate it.
-             `smooth` is skipped when the OS asks for reduced motion — the
-             media query is read directly because this is a one-shot imperative
-             call, not a render-time decision. */
-          const behavior = typeof window !== 'undefined'
-            && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
-            ? 'auto' : 'smooth';
-          document.getElementById('wallet-btc-card')?.scrollIntoView({ behavior, block: 'center' });
-        }}
+        getSigner={wallet.getSigner}
+        account={wallet.address}
       />
       )}
 
@@ -1281,7 +1302,7 @@ export default function Wallet() {
           paints instantly and can never claim the wallet is not connected
           while it demonstrably is. */}
       <Sheet open={intelSheet} onClose={() => setIntelSheet(false)} title={t('intel.title')} anchor="bottom" size="lg">
-        <Portfolio embedded portfolio={portfolio} intel={intel} />
+        <Portfolio embedded portfolio={displayPortfolio} intel={intel} />
       </Sheet>
 
       {/* P&L detail */}

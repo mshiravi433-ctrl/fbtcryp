@@ -66,6 +66,14 @@
   background: linear-gradient(135deg, rgba(58, 232, 176, 0.10), rgba(94, 246, 255, 0.05));
   border: 1px solid rgba(58, 232, 176, 0.28);
 }
+/* Session key — a permission token Intent OS verifies, never a signing secret. */
+.sw-session-key {
+  padding: 10px 12px;
+  border-radius: 13px;
+  border: 1px solid var(--line, rgba(255,255,255,0.12));
+  background: rgba(255,255,255,0.035);
+}
+.sw-session-key code { color: var(--text-1); opacity: 0.9; }
 .sw-session-clock {
   font-variant-numeric: tabular-nums;
   font-size: 22px;

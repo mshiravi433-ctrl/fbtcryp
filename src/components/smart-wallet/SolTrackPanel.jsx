@@ -87,11 +87,17 @@ function StateLine({ tone = 'idle', children }) {
   return <p className="sol-track-state" data-tone={tone}>{children}</p>;
 }
 
-export default function SolTrackPanel({ vs = 'usd', currencySymbol = '$' }) {
+export default function SolTrackPanel({ vs = 'usd', currencySymbol = '$', initialAddress = null }) {
   const { t } = useTranslation();
+  /* A whale row in Smart Money passes an address in the URL. It wins over
+     the remembered address, which wins over an injected wallet: the thing the
+     user just tapped is the thing they asked to inspect. */
+  const seed = isSolanaAddress(initialAddress)
+    ? String(initialAddress).trim()
+    : (loadWatchedAddress() || injectedSolanaAddress() || null);
   const [tab, setTab] = useState('wallet');
-  const [draft, setDraft] = useState(() => loadWatchedAddress() || injectedSolanaAddress() || '');
-  const [tracked, setTracked] = useState(() => loadWatchedAddress() || injectedSolanaAddress() || null);
+  const [draft, setDraft] = useState(() => seed || '');
+  const [tracked, setTracked] = useState(() => seed || null);
   const [wallet, setWallet] = useState(null);
   const [whales, setWhales] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -101,21 +107,50 @@ export default function SolTrackPanel({ vs = 'usd', currencySymbol = '$' }) {
   const trackedRef = useRef(tracked);
   trackedRef.current = tracked;
 
+  /* The panel can already be mounted when a tracking request arrives (Smart
+     Money → Smart Wallet keeps the same SPA document). Adopt the new address
+     instead of waiting for a reload, and drop cached reads for the old one. */
+  useEffect(() => {
+    if (!seed || seed === trackedRef.current) return;
+    saveWatchedAddress(seed);
+    invalidateSolTrack();
+    setDraft(seed);
+    setTracked(seed);
+    setError(null);
+  }, [seed]);
+
   const readWallet = useCallback(async (address) => {
     if (!isSolanaAddress(address)) return;
     setBusy(true);
-    const out = await getSolanaWalletTrack(address, vs);
-    if (trackedRef.current !== address) return;   /* a newer address won the race */
-    setWallet(out);
-    setError(out?.ok ? null : (out?.code || 'NETWORK'));
-    setBusy(false);
+    try {
+      const out = await getSolanaWalletTrack(address, vs);
+      if (trackedRef.current !== address) return;   /* a newer address won the race */
+      setWallet(out);
+      setError(out?.ok ? null : (out?.code || 'NETWORK'));
+    } catch {
+      if (trackedRef.current === address) {
+        setWallet({ ok: false, code: 'NETWORK' });
+        setError('NETWORK');
+      }
+    } finally {
+      /* The old code returned early on a stale address with busy still true,
+         which left the refresh icon spinning forever after a quick switch. */
+      if (trackedRef.current === address) setBusy(false);
+    }
   }, [vs]);
 
   const readWhales = useCallback(async () => {
     setBusy(true);
-    const out = await getSolanaWhales(vs);
-    setWhales(out);
-    setBusy(false);
+    try {
+      const out = await getSolanaWhales(vs);
+      setWhales(out);
+      if (!out?.ok) setError((out?.code) || 'NETWORK');
+    } catch {
+      setWhales({ ok: false, code: 'NETWORK' });
+      setError('NETWORK');
+    } finally {
+      setBusy(false);
+    }
   }, [vs]);
 
   /* First read, and again whenever the tracked address or the currency changes. */

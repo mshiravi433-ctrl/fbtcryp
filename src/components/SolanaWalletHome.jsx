@@ -136,11 +136,11 @@ export default function SolanaWalletHome({
             <div className="sol-wal-balance">
               <span className="faint">{t('solana.balance')}</span>
               <strong className="mono">
-                {balanceLoading
+                {loading && !holdings
                   ? t('common.loading')
-                  : balanceFailed || balance == null
+                  : !solRow || solRow.unread || solRow.amount == null
                     ? '—'
-                    : `${balance} SOL`}
+                    : `${solRow.amount} SOL`}
               </strong>
             </div>
           )}
