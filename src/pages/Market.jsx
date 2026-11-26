@@ -123,6 +123,17 @@ import '../styles/market-request-fixes.css';
  * motion / native / lite / opt-in guards the route already uses.
  */
 import '../styles/market-token-2026.css';
+/*
+ * ─── THE STUDIO PASS — BOTH TABS, ONE SYSTEM (2026-11-26) ─────────────────
+ * The ten earlier sheets each own a decision and a regression pin. This one is
+ * the last design layer: it folds their competing accents onto the route's own
+ * palette and gives «مرور» and «توکن» one spacing, radius and type system. It
+ * is imported after every design sheet so a token re-grade can win, and it
+ * adds no keyframe, blur, mask or filter — the stop policy in market-perf.css
+ * still owns what may move. Responsive rules inside the sheet end at the phone
+ * breakpoint so a narrow screen never pays for the desktop bento.
+ */
+import '../styles/market-studio.css';
 import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';
