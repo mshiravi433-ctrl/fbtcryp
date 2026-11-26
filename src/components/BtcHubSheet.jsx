@@ -313,7 +313,6 @@ export default function BtcHubSheet({ open, onClose, vaultState = 'none', getSig
                 <button
                   type="button"
                   className="wallet-action-btn btc-hub-action btc-hub-action-send"
-                  disabled={!address || confirmed <= 0}
                   onClick={() => { setSendPrefill(null); setSendOpen(true); }}
                 >
                   <span aria-hidden="true">↗</span>
@@ -322,7 +321,6 @@ export default function BtcHubSheet({ open, onClose, vaultState = 'none', getSig
                 <button
                   type="button"
                   className="wallet-action-btn btc-hub-action btc-hub-action-recv"
-                  disabled={!address}
                   onClick={() => setReceiveOpen(true)}
                 >
                   <span aria-hidden="true">↙</span>

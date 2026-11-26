@@ -87,7 +87,7 @@ export default function WalletCommandSheet({ open, onClose, initialTab = 'overvi
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title={t('wnew.title')} anchor="bottom" size="lg" headerAction={smartButton} testId="wallet-command-sheet">
+    <Sheet open={open} onClose={onClose} title={t('wnew.title')} anchor="bottom" size="lg" headerAction={tab === 'overview' ? smartButton : undefined} testId="wallet-command-sheet">
       <div className="wcmd">
         {tab === 'overview' && (
           <div className="wcmd-panel" role="tabpanel">

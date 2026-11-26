@@ -26,14 +26,17 @@ export default function WalletOptimizeSheet({ open, onClose, portfolio = {}, wal
     activeChainId: wallet.chainId
   }), [portfolio.rows, portfolio.chains, portfolio.totalValue, wallet.chainId]);
 
-  const go = (to) => { onClose?.(); navigate(to); };
+  const go = (to) => {
+    onClose?.();
+    if (to && to !== '/wallet') navigate(to);
+  };
 
   const actionFor = (id) => {
     const symbol = report.top?.symbol || 'ETH';
     switch (id) {
-      case 'concentration': return `/intent?tab=compose&from=${encodeURIComponent(symbol)}&to=USDC`;
-      case 'stableBuffer': return '/intent?tab=compose&to=USDC';
-      case 'gasReserve': return `/intent?tab=compose&from=USDC&to=${encodeURIComponent(EVM_CHAINS[wallet.chainId]?.native?.symbol || 'ETH')}`;
+      case 'concentration': return `/intent?tab=compose&from=${encodeURIComponent(symbol)}&to=USDC&source=wallet-optimize`;
+      case 'stableBuffer': return '/intent?tab=compose&to=USDC&source=wallet-optimize';
+      case 'gasReserve': return `/intent?tab=compose&from=USDC&to=${encodeURIComponent(EVM_CHAINS[wallet.chainId]?.native?.symbol || 'ETH')}&source=wallet-optimize`;
       case 'singleChain': return '/bridge';
       case 'unpriced': return '/wallet';
       case 'noPricedHoldings': return '/market';
@@ -45,8 +48,8 @@ export default function WalletOptimizeSheet({ open, onClose, portfolio = {}, wal
   const circumference = 2 * Math.PI * 42;
 
   return (
-    <Sheet open={open} onClose={onClose} title={t('wnew.opt.title')} anchor="bottom" size="lg" className="sheet-full" testId="wallet-optimize-sheet">
-      <div className="wopt">
+    <Sheet open={open} onClose={onClose} title={t('wnew.opt.title')} anchor="bottom" size="lg" testId="wallet-optimize-sheet">
+      <div className="wopt" style={{ paddingBottom: 8 }}>
         <div className="wopt-head">
           <div className="wopt-ring" role="img" aria-label={`${t('wnew.opt.score')}: ${report.score ?? '—'}`}>
             <svg viewBox="0 0 100 100" width="100" height="100" aria-hidden="true">

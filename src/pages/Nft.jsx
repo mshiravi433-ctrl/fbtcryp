@@ -283,12 +283,6 @@ export default function Nft() {
         </>
       )}
 
-      {wallet.address && chains?.configured && (
-        <p className="nft-modern-note">
-          {t('nft.notIndexedNote')}
-        </p>
-      )}
-
       {failedChains.length > 0 && state === 'done' && (
         <p className="notice">{t('nft.partialIndex')} {failedChains.map((id) => EVM_CHAINS[id]?.short ?? id).join(' · ')}</p>
       )}
