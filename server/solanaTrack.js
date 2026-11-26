@@ -69,6 +69,7 @@ import { fetchSimplePrices } from './providers.js';
 import { storeGet, storeSet, storeDurable } from './store.js';
 import { relaySolanaRpc, relayUpstreams, redactUpstream } from './solanaRpcRelay.js';
 import { fetchSolanaWhales, solscanConfigured } from './solanaIntel.js';
+import { cpuSnapshot } from './cpuMeter.js';
 
 export const SOLANA_TRACK_SCHEMA = 'fbt.solana-track.v1';
 export const SOLANA_WHALE_SCHEMA = 'fbt.solana-whale-watch.v1';
@@ -122,6 +123,31 @@ const whaleSampleMs = () => num('SOLANA_WHALE_SAMPLE_MS', 20 * 60_000);
 const WHALE_SAMPLE_KEY = 'solana:whale-sample:v2';
 /** A sample older than this is not offered to the client at all. */
 const whaleLedgerMaxAgeMs = () => num('SOLANA_WHALE_LEDGER_AGE_MS', 6 * 3600_000);
+
+/**
+ * THE ACTIVE-CPU BREAKER —«مصرف سرور سولانا زیاد است».
+ *
+ * A whole block is the one read on this route that spends real CPU: 5–24 MB
+ * of JSON parsed and walked, on an instance whose Fluid Active CPU allowance
+ * is four hours PER MONTH. The durable sample already stops other instances
+ * from repeating it. This breaker stops ONE hot instance from repeating it
+ * after its own meter has already charged this route more than the budget
+ * below (default 1.5 s of CPU — several blocks' worth).
+ *
+ * It is not a circuit breaker on the RESPONSE: the rolling ledger, Solscan and
+ * the last durable sample are still served, with `blocksPerRefresh: 0` and an
+ * explicit `cpuGuard` reason. A hot instance stops spending; it never starts
+ * inventing a quiet chain.
+ */
+export const whaleCpuGuardLimitMs = () => num('SOLANA_WHALE_CPU_GUARD_MS', 1500);
+
+export function whaleCpuGuard(snapshot = null) {
+  const limitMs = whaleCpuGuardLimitMs();
+  const snap = snapshot || (typeof cpuSnapshot === 'function' ? cpuSnapshot() : null);
+  const row = (snap?.routes || []).find((r) => /\/api\/solana\/track\/whales/.test(String(r?.route || '')));
+  const cpuMs = Number(row?.cpuMs ?? 0);
+  return { skip: Number.isFinite(cpuMs) && cpuMs > limitMs, cpuMs, limitMs };
+}
 
 /* A base-58 public key: 32–44 characters, no 0, O, I or l. The same shape the
    rest of the server uses (server/solanaChainReads.js `isSolanaPubkey`). */
@@ -619,6 +645,7 @@ export async function solanaWhaleWatch({ vs = 'usd', force = false } = {}) {
     const durable = await readDurableSample();
     if (durable) adoptDurableSample(durable);
     if (durable?.coverage) lastSample = durable.coverage;
+    const guard = whaleCpuGuard();
 
     /* Solscan first: it is indexed, it carries labels, and it covers token
        movements the block sample cannot see. When the key is absent the
@@ -637,7 +664,11 @@ export async function solanaWhaleWatch({ vs = 'usd', force = false } = {}) {
     }
 
     const fresh = !force && sampleIsFresh(durable, { now });
-    if (blockScanEnabled() && fresh) {
+    if (blockScanEnabled() && guard.skip) {
+      /* Served from the rolling ledger / durable sample / Solscan only. Say so
+         in coverage instead of quietly looking like a quiet chain. */
+      errors.push({ source: 'cpu-guard', detail: `${Math.round(guard.cpuMs)}ms of ${guard.limitMs}ms CPU budget spent on this route` });
+    } else if (blockScanEnabled() && fresh) {
       /* Someone (this instance a minute ago, or another one any time inside
          the window) already paid for a block. Reuse it. */
       sampled = durable.coverage;
@@ -712,7 +743,8 @@ export async function solanaWhaleWatch({ vs = 'usd', force = false } = {}) {
       coverage: {
         /* How much chain this list represents, said out loud. `sampleMs` and
            `reused` are what tell a reader that a quiet list is not an outage. */
-        blocksPerRefresh: blockScanEnabled() ? 1 : 0,
+        blocksPerRefresh: blockScanEnabled() && !guard.skip ? 1 : 0,
+        cpuGuard: guard,
         sampleMs: whaleSampleMs(),
         sampleReused,
         durable: storeDurable(),

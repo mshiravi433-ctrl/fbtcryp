@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageTransition, { riseIn } from '../components/PageTransition';
 import { useSettingsStore } from '../store/useSettingsStore';
 import { currencyOf, vsOf } from '../lib/currency';
@@ -76,6 +76,11 @@ export default function SmartWallet({ embedded = false, onBack }) {
    */
   const displayCurrency = currencyOf(useSettingsStore((state) => state.currency));
   const navigate = useNavigate();
+  /* A whale row in Smart Money can hand an address straight to the tracker:
+     «ردیابی این کیف پول» navigates here with ?track=<address>. The panel owns
+     the storage and the read; this page only forwards the intent. */
+  const [searchParams] = useSearchParams();
+  const trackAddress = searchParams.get('track');
   const { haptic } = useTelegram();
   const [tick, setTick] = useState(0);
   const policy = useMemo(() => loadPolicy(), [tick]);
@@ -104,6 +109,7 @@ export default function SmartWallet({ embedded = false, onBack }) {
    */
   const [intentMem, setIntentMem] = useState(() => loadIntentMemory());
   const [rulesSaved, setRulesSaved] = useState(false);
+  const [keyCopied, setKeyCopied] = useState(false);
 
   const patchRules = (patch) => {
     const next = saveIntentMemory({ ...intentMem, ...patch });
@@ -165,15 +171,31 @@ export default function SmartWallet({ embedded = false, onBack }) {
       haptic?.('error');
       return;
     }
+    /* «کلید نشست» — the key is handed to Intent OS here, at the moment the
+       user opens the session, so the safety gate can verify it later without
+       asking the user to paste it into a second screen. */
+    patchRules({ sessionKey: r.key });
     setSessionErr(null);
     haptic?.('success');
     refresh();
   };
   const onEndSession = () => {
     endSession();
+    patchRules({ sessionKey: '' });
+    setKeyCopied(false);
     setSessionErr(null);
     haptic?.('select');
     refresh();
+  };
+  const copySessionKey = async () => {
+    const key = policy.session?.key;
+    if (!key) return;
+    try {
+      await navigator.clipboard.writeText(key);
+      setKeyCopied(true);
+      haptic?.('success');
+      setTimeout(() => setKeyCopied(false), 1600);
+    } catch { setKeyCopied(false); }
   };
 
   const goBack = () => (onBack ? onBack() : navigate(-1));
@@ -374,6 +396,22 @@ export default function SmartWallet({ embedded = false, onBack }) {
                 <div style={{ fontSize: 10.5, color: '#3AE8B0', fontWeight: 800, direction: 'ltr' }}>+${sessionBonus}</div>
               </div>
             </div>
+            <div className="sw-session-key" style={{ marginTop: 10 }}>
+              <div className="row-between" style={{ gap: 8 }}>
+                <span className="faint" style={{ fontSize: 10.5, fontWeight: 700 }}>
+                  {t('smart.sessionKey', { defaultValue: 'کلید نشست' })}
+                </span>
+                <button type="button" className="btn btn-ghost btn-sm" style={{ minHeight: 30, borderRadius: 10 }} onClick={copySessionKey}>
+                  {keyCopied ? '✓' : t('smart.sessionKeyCopy', { defaultValue: 'کپی کلید نشست' })}
+                </button>
+              </div>
+              <code dir="ltr" style={{ display: 'block', marginTop: 4, fontSize: 11, wordBreak: 'break-all' }}>
+                {policy.session.key}
+              </code>
+              <p className="faint" style={{ fontSize: 10.5, lineHeight: 1.7, margin: '5px 0 0' }}>
+                {t('smart.sessionKeyBody', { defaultValue: 'Intent OS فقط با این کلید می‌تواند از سقف بالاتر نشست استفاده کند.' })}
+              </p>
+            </div>
             <button className="btn btn-ghost" style={{ marginTop: 10, width: '100%' }} onClick={onEndSession}>
               {t('smart.endSession')}
             </button>
@@ -396,7 +434,11 @@ export default function SmartWallet({ embedded = false, onBack }) {
 
       {/* ── SOLANA TRACKING · read-only ───────────────────────── */}
       <motion.div variants={riseIn} initial="hidden" animate="show">
-        <SolTrackPanel vs={vsOf(displayCurrency.code)} currencySymbol={displayCurrency.symbol} />
+        <SolTrackPanel
+          vs={vsOf(displayCurrency.code)}
+          currencySymbol={displayCurrency.symbol}
+          initialAddress={trackAddress}
+        />
       </motion.div>
 
       {/* ── GUARDIANS ───────────────────────────────────────── */}
@@ -409,6 +451,23 @@ export default function SmartWallet({ embedded = false, onBack }) {
       >
         <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 6 }}>{t('smart.guardiansTitle')}</div>
         <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.75, marginTop: 0 }}>{t('smart.guardiansBody')}</p>
+        <p className="faint" style={{ fontSize: 11.5, lineHeight: 1.7, margin: '4px 0 0' }}>
+          {t('smart.guardiansRecovery', { defaultValue: 'این مخاطبان همان لیست بازیابی اجتماعی Intent OS هستند.' })}
+        </p>
+        <div className="row" style={{ gap: 8, marginTop: 10, alignItems: 'center' }}>
+          <label className="field-label" style={{ margin: 0, fontSize: 11 }}>
+            {t('smart.recoveryThreshold', { defaultValue: 'حد نصاب تأیید بازیابی' })}
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="5"
+            value={policy.recoveryThreshold ?? 2}
+            onChange={(e) => { savePolicy({ recoveryThreshold: Math.max(1, Math.min(5, Number(e.target.value) || 1)) }); refresh(); }}
+            style={{ width: 64, padding: '6px 8px', borderRadius: 10 }}
+            aria-label={t('smart.recoveryThreshold', { defaultValue: 'حد نصاب تأیید بازیابی' })}
+          />
+        </div>
         <div className="row" style={{ gap: 8, marginTop: 10 }}>
           <input value={guardian} onChange={(e) => setGuardian(e.target.value)} placeholder="0x…" style={{ flex: 1 }} />
           <button
@@ -509,11 +568,18 @@ export default function SmartWallet({ embedded = false, onBack }) {
               </div>
             </div>
           </div>
-          <span
-            className={`pill ${rulesSaved ? 'pill-up' : 'pill-neutral'}`}
-            style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 999 }}
-          >
-            {rulesSaved ? `✓ ${t('smart.rulesSaved', { defaultValue: 'ذخیره شد' })}` : t('smart.rulesBadge', { defaultValue: 'تنظیمات محلی' })}
+          <span className="row" style={{ gap: 6 }}>
+            {intentMem.sessionKey && (
+              <span className="pill pill-up" style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 999 }} data-testid="smart-intent-session-key">
+                {t('smart.sessionKeyOn', { defaultValue: 'کلید نشست متصل' })}
+              </span>
+            )}
+            <span
+              className={`pill ${rulesSaved ? 'pill-up' : 'pill-neutral'}`}
+              style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 999 }}
+            >
+              {rulesSaved ? `✓ ${t('smart.rulesSaved', { defaultValue: 'ذخیره شد' })}` : t('smart.rulesBadge', { defaultValue: 'تنظیمات محلی' })}
+            </span>
           </span>
         </div>
 

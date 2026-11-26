@@ -14276,10 +14276,9 @@ export default function run() {
     /* needle matches both static imports and dynamic import('../lib/btcWallet') */
     for (const [needle, allowed] of [
       [/lib\/btcWallet/, new Set([
-        'src/components/BtcCard.jsx', 'src/components/BtcSendSheet.jsx',
-        'src/components/P2PMarket.jsx', 'src/components/ReceiveSheet.jsx'
-      ])],
-      [/components\/BtcCard/, new Set(['src/pages/Wallet.jsx'])]
+        'src/components/BtcSendSheet.jsx', 'src/components/P2PMarket.jsx',
+        'src/components/ReceiveSheet.jsx', 'src/hooks/useBtcHolding.js'
+      ])]
     ]) {
       const users = walk('src')
         .filter((p) => needle instanceof RegExp ? needle.test(stripCode(read(p))) : stripCode(read(p)).includes(needle));
@@ -14414,8 +14413,24 @@ export default function run() {
     const hub = read('src/components/BtcHubSheet.jsx');
     t('the Bitcoin sheet labels watch-only addresses as view-only',
       /btc\.watch\.viewOnly/.test(hub));
+    const watchSection = hub.slice(hub.indexOf('watch-only list'), hub.indexOf('</Sheet>'));
     t('the Bitcoin sheet offers no send control for watched addresses',
-      !/btcTx|signTx|broadcast/i.test(stripCode(hub)));
+      !/btc\.card\.send|BtcSendSheet|signTx|broadcast/i.test(stripCode(watchSection)));
+    t('the popup itself owns the own-wallet send and receive path',
+      /BtcSendSheet/.test(hub) && /qrcode/.test(hub));
+    t('the wallet page mounts no bottom BTC card',
+      !/components\/BtcCard|BtcCard/.test(stripCode(read('src/pages/Wallet.jsx'))));
+    const breakdown = read('src/pages/Wallet.jsx').split('function ChainBreakdown')[1]?.split('function AssetList')[0] || '';
+    t('the lower network card is a readout, not a second network selector',
+      breakdown.length > 0 && !/onSelect\(/.test(breakdown) && !/<button/.test(breakdown));
+    const walletSrc = read('src/pages/Wallet.jsx');
+    t('the wallet folds its own BTC into the displayed portfolio, priced like any asset',
+      /useBtcHolding/.test(walletSrc)
+      && /marketRows\?\.find\(\(c\) => c\.id === 'bitcoin'\)/.test(walletSrc)
+      && /chainId: 'btc'/.test(walletSrc)
+      && /totalValue: portfolio\.totalValue \+ \(btcRow\?\.value \?\? 0\)/.test(walletSrc));
+    t('a BTC asset row opens the popup, not an EVM token-detail sheet',
+      /chainId === 'btc'\)[\s\S]{0,120}setBtcHubOpen\(true\)/.test(walletSrc));
 
     /* i18n: every new key, in the primary market's language too. */
     const enJson = JSON.parse(read('src/i18n/locales/en.json'));

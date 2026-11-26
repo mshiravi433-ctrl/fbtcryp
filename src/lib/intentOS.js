@@ -37,7 +37,12 @@ export const DEFAULT_INTENT_MEMORY = Object.freeze({
   quietHoursEnabled: false,
   quietStart: 23,
   quietEnd: 7,
-  requireExecutionProof: true
+  requireExecutionProof: true,
+  /* The Smart Wallet's live session key, copied here by the user when they
+     want Intent OS to use the session's raised caps. It is a local permission
+     token, NOT a signing secret — no mnemonic or private key ever enters this
+     memory. */
+  sessionKey: ''
 });
 
 /**
@@ -147,7 +152,8 @@ export function sanitizeIntentMemory(input = {}) {
     quietHoursEnabled: Boolean(input.quietHoursEnabled),
     quietStart: Math.round(clamp(input.quietStart, 0, 23, DEFAULT_INTENT_MEMORY.quietStart)),
     quietEnd: Math.round(clamp(input.quietEnd, 0, 23, DEFAULT_INTENT_MEMORY.quietEnd)),
-    requireExecutionProof: input.requireExecutionProof !== false
+    requireExecutionProof: input.requireExecutionProof !== false,
+    sessionKey: /^[A-Za-z0-9_-]{1,120}$/.test(String(input.sessionKey || '')) ? String(input.sessionKey).trim() : ''
   };
 }
 

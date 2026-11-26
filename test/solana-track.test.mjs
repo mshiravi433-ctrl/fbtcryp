@@ -366,10 +366,33 @@ test('SmartWallet renders the panel between the session card and the guardians',
   /* The display currency is resolved the way every other screen resolves it,
      not hard-coded to `$` (the app is USD-only by owner decision, but a
      hard-coded symbol is how that decision outlives its own reversal). */
-  assert.ok(page.includes('<SolTrackPanel vs={vsOf(displayCurrency.code)} currencySymbol={displayCurrency.symbol} />'));
+  assert.ok(/<SolTrackPanel[\s\S]*?vs=\{vsOf\(displayCurrency\.code\)\}[\s\S]*?currencySymbol=\{displayCurrency\.symbol\}/.test(page));
   assert.ok(page.includes("import { currencyOf, vsOf } from '../lib/currency'"));
   assert.ok(page.includes('currencyOf(useSettingsStore((state) => state.currency))'));
   const at = page.indexOf('<SolTrackPanel');
   assert.ok(at > page.indexOf('SESSION CARD'), 'after the session card — limits first, then what they protect');
   assert.ok(at < page.indexOf('GUARDIANS'), 'before the guardians');
+});
+
+test('the whale feed has an Active-CPU breaker that reports, never invents', async () => {
+  const { whaleCpuGuard, whaleCpuGuardLimitMs } = await import('../server/solanaTrack.js');
+  const limit = whaleCpuGuardLimitMs();
+  assert.ok(limit > 0);
+  assert.equal(whaleCpuGuard({ routes: [] }).skip, false, 'a quiet instance still samples a block');
+  assert.equal(whaleCpuGuard({ routes: [{ route: 'GET /api/solana/track/whales', cpuMs: limit / 2 }] }).skip, false);
+  const hot = whaleCpuGuard({ routes: [{ route: 'GET /api/solana/track/whales', cpuMs: limit + 1 }] });
+  assert.equal(hot.skip, true, 'a route that already spent its CPU budget stops reading blocks');
+  assert.equal(whaleCpuGuard({ routes: [{ route: 'GET /api/coins', cpuMs: 10_000 }] }).skip, false, 'another route must not stop this feed');
+});
+
+test('Solana whale rows are a real action, and the panel never sticks busy', () => {
+  const sm = readFileSync(new URL('../src/pages/SmartMoney.jsx', import.meta.url), 'utf8');
+  assert.ok(/sm-solana-overview/.test(sm), 'the overview tab shows Solana whales, not just the whales tab');
+  assert.ok(/sm-solana-track-whale/.test(sm), 'a whale row exposes a track control');
+  assert.ok(/saveWatchedAddress\(row\.to\)/.test(sm), 'tracking persists the address');
+  assert.ok(/navigate\(`\/smart-wallet\?track=\$\{encodeURIComponent\(row\.to\)\}`\)/.test(sm), 'tracking opens the Smart Wallet tracker');
+  const page = readFileSync(new URL('../src/pages/SmartWallet.jsx', import.meta.url), 'utf8');
+  assert.ok(/initialAddress=\{trackAddress\}/.test(page), 'the tracker adopts the handed-over address');
+  const panel = readFileSync(new URL('../src/components/smart-wallet/SolTrackPanel.jsx', import.meta.url), 'utf8');
+  assert.ok(/finally\s*\{/.test(panel), 'a failed or superseded read always clears the busy flag');
 });

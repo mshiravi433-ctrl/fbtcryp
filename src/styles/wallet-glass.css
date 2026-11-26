@@ -597,6 +597,13 @@
 @media (hover: hover) and (pointer: fine) {
   .walx .wal-chain-row:hover { background: var(--walx-inset-2); }
 }
+/* The lower network card is now a readout, not a second selector: only the
+   NetworkSelect popup chooses a network. These rows must not look tappable. */
+.walx .wal-chain-row[role='listitem'] { cursor: default; }
+.walx .wal-chain-row[role='listitem']:active { transform: none; }
+@media (hover: hover) and (pointer: fine) {
+  .walx .wal-chain-row[role='listitem']:hover { background: var(--walx-inset); }
+}
 .walx .wal-chain-row.is-active {
   border-color: color-mix(in srgb, var(--chip-color, var(--rgb-1)) 36%, transparent);
   background: color-mix(in srgb, var(--chip-color, var(--rgb-1)) 8%, transparent);

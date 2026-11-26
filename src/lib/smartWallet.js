@@ -21,6 +21,8 @@
  * they cannot accidentally turn the policy off by breaking it.
  */
 
+import { btcAddressInfo } from './btcAddress.js';
+
 const STORAGE_KEY = 'fbt-smart-wallet-v1';
 const SPEND_KEY = 'fbt-smart-wallet-spend-v1';
 
@@ -35,10 +37,38 @@ export const DEFAULT_POLICY = {
   guardians: [],
   session: null,
   requireConfirmAboveUsd: 100,
+  recoveryThreshold: 2,
   updatedAt: 0
 };
 
 const isAddr = (s) => /^0x[a-fA-F0-9]{40}$/.test(String(s || '').trim());
+const isSolanaAddr = (s) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(s || '').trim());
+/* BTC validation costs a pure checksum computation (no network, no key). The
+   allowlist is a place where a typo must fail closed, so a regex would not do. */
+function isBtcAddr(s) {
+  const value = String(s || '').trim();
+  if (!/^(bc1[02-9ac-hj-np-z]{11,71}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$/.test(value)) return false;
+  try { return btcAddressInfo(value).valid === true; } catch { return false; }
+}
+
+/**
+ * Destinations are now chain-aware: the same allowlist can hold an EVM
+ * address, a Solana public key or a mainnet BTC address, and a send on any of
+ * those chains is matched against the exact string the user approved.
+ */
+export function destinationKind(value) {
+  const s = String(value || '').trim();
+  if (isAddr(s)) return 'evm';
+  if (isSolanaAddr(s)) return 'solana';
+  if (isBtcAddr(s)) return 'bitcoin';
+  return null;
+}
+
+export function validateDestination(value) {
+  const kind = destinationKind(value);
+  return kind ? { ok: true, kind, value: String(value).trim() } : { ok: false, code: 'BAD_ADDRESS' };
+}
+
 const todayUtc = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
 function readJson(key, fallback) {
@@ -67,17 +97,18 @@ export function loadPolicy() {
   return {
     ...DEFAULT_POLICY,
     ...raw,
-    allowlist: Array.isArray(raw.allowlist) ? raw.allowlist.filter(isAddr) : [],
+    allowlist: Array.isArray(raw.allowlist) ? raw.allowlist.filter((a) => destinationKind(a)) : [],
     guardians: Array.isArray(raw.guardians) ? raw.guardians.filter(isAddr).slice(0, 5) : [],
     dailyLimitUsd: clampUsd(raw.dailyLimitUsd, DEFAULT_POLICY.dailyLimitUsd),
     perTxLimitUsd: clampUsd(raw.perTxLimitUsd, DEFAULT_POLICY.perTxLimitUsd),
-    requireConfirmAboveUsd: clampUsd(raw.requireConfirmAboveUsd, DEFAULT_POLICY.requireConfirmAboveUsd)
+    requireConfirmAboveUsd: clampUsd(raw.requireConfirmAboveUsd, DEFAULT_POLICY.requireConfirmAboveUsd),
+    recoveryThreshold: Math.max(1, Math.min(5, Math.trunc(Number(raw.recoveryThreshold)) || 2))
   };
 }
 
 export function savePolicy(patch) {
   const next = { ...loadPolicy(), ...patch, updatedAt: Date.now() };
-  next.allowlist = (next.allowlist || []).filter(isAddr).slice(0, 20);
+  next.allowlist = (next.allowlist || []).filter((a) => destinationKind(a)).slice(0, 20);
   next.guardians = (next.guardians || []).filter(isAddr).slice(0, 5);
   next.dailyLimitUsd = clampUsd(next.dailyLimitUsd, DEFAULT_POLICY.dailyLimitUsd);
   next.perTxLimitUsd = clampUsd(next.perTxLimitUsd, DEFAULT_POLICY.perTxLimitUsd);
@@ -111,6 +142,18 @@ export function recordSpend(usd, now = Date.now()) {
  * Open a session window. During it, the daily cap is raised by `bonusUsd`
  * and the per-tx cap is the session's own ceiling. Expires automatically.
  */
+function newSessionKey(now = Date.now()) {
+  const random = globalThis.crypto?.randomUUID?.().replace(/-/g, '').slice(0, 12)
+    || Math.random().toString(36).slice(2, 14);
+  return `sess_${now.toString(36)}_${random}`;
+}
+
+/**
+ * Open a session AND mint its one-time key. The key is returned to the caller
+ * so the Smart Wallet can show it; the policy stores only the key, never a
+ * seed or a signing secret. An Intent OS action that wants the session's
+ * raised limits must present this exact key.
+ */
 export function startSession({ minutes = 30, bonusUsd = 0, perTxUsd = null } = {}, now = Date.now()) {
   const mins = Number(minutes);
   if (!Number.isFinite(mins) || mins < 1 || mins > 24 * 60) return { error: 'BAD_SESSION' };
@@ -118,9 +161,50 @@ export function startSession({ minutes = 30, bonusUsd = 0, perTxUsd = null } = {
     startedAt: now,
     expiresAt: now + mins * 60_000,
     bonusUsd: clampUsd(bonusUsd, 0),
-    perTxUsd: perTxUsd == null ? null : clampUsd(perTxUsd, 0)
+    perTxUsd: perTxUsd == null ? null : clampUsd(perTxUsd, 0),
+    key: newSessionKey(now),
+    requireKey: true
   };
-  return { policy: savePolicy({ session }) };
+  return { policy: savePolicy({ session }), key: session.key };
+}
+
+/**
+ * «کلید نشست» — verify a key against the LIVE session, never against a record
+ * the user has already ended or that has expired on its own.
+ */
+export function verifySessionKey(key, now = Date.now(), policy = null) {
+  const session = activeSession(policy || loadPolicy(), now);
+  if (!session) return { ok: false, code: 'NO_SESSION' };
+  if (!session.key) return { ok: false, code: 'SESSION_KEY_REQUIRED' };
+  const presented = String(key ?? '').trim();
+  if (!presented || presented !== session.key) return { ok: false, code: 'BAD_SESSION_KEY' };
+  return { ok: true, session };
+}
+
+/**
+ * «مخاطبان بازیابی اجتماعی» — a recovery request is not a send. It names the
+ * recipients who will receive the share, and every one of them must already be
+ * a guardian. A request with a stranger in it is refused in full, not
+ * partially executed: this is the one list an attacker most wants widened.
+ */
+export function requestSocialRecovery({ recipients = [], approvals = 0, now = Date.now() } = {}) {
+  const policy = loadPolicy();
+  const named = Array.isArray(recipients) ? recipients.map((r) => String(r || '').trim()) : [];
+  const threshold = Number(policy.recoveryThreshold ?? 2);
+  if (!named.length) return { ok: false, code: 'NO_RECIPIENTS' };
+  if (named.length > policy.guardians.length) return { ok: false, code: 'NOT_A_GUARDIAN' };
+  const known = new Set(policy.guardians.map((g) => g.toLowerCase()));
+  const stranger = named.find((r) => !known.has(r.toLowerCase()));
+  if (stranger) return { ok: false, code: 'NOT_A_GUARDIAN', address: stranger };
+  const approvalCount = Number(approvals);
+  return {
+    ok: true,
+    recipients: named,
+    threshold: Number.isFinite(threshold) && threshold > 0 ? threshold : 2,
+    approvalsRequired: Math.max(1, Math.min(named.length, Number.isFinite(approvalCount) && approvalCount > 0 ? approvalCount : 2)),
+    at: now,
+    note: 'Contacts only. This app cannot move a recovered seed or sign on their behalf.'
+  };
 }
 
 export function endSession() {
@@ -139,30 +223,48 @@ export function activeSession(policy, now = Date.now()) {
  *
  * @returns {{ ok: boolean, code?: string, remainingUsd?: number, needsConfirm?: boolean }}
  */
-export function checkPolicy({ usd, to = null, now = Date.now() } = {}) {
+export function checkPolicy({ usd, to = null, now = Date.now(), origin = 'user', sessionKey = null, recovery = null } = {}) {
   const policy = loadPolicy();
   if (!policy.enabled) return { ok: true, remainingUsd: null, needsConfirm: false };
 
   const amount = Number(usd);
   if (!Number.isFinite(amount) || amount < 0) return { ok: false, code: 'BAD_AMOUNT' };
 
+  /* A social-recovery request is checked against the GUARDIANS, not the
+     destination allowlist: the two lists answer different questions. */
+  if (recovery) {
+    const request = requestSocialRecovery({ ...recovery, now });
+    if (!request.ok) return { ok: false, code: request.code };
+    return { ok: true, recovery: request, remainingUsd: null, needsConfirm: true };
+  }
+
   if (to && policy.allowlist.length) {
-    if (!isAddr(to) || !policy.allowlist.some((a) => a.toLowerCase() === to.toLowerCase())) {
+    if (!destinationKind(to) || !policy.allowlist.some((a) => a.toLowerCase() === String(to).trim().toLowerCase())) {
       return { ok: false, code: 'NOT_ALLOWLISTED' };
     }
   }
 
   const session = activeSession(policy, now);
-  const perTx = session?.perTxUsd != null ? session.perTxUsd : policy.perTxLimitUsd;
+  /* «کلید نشست» is enforced for AGENT-originated actions. A user clicking Send
+     in their own wallet is already the authentication; an intent the OS is
+     about to execute is not. Without the key it gets the ordinary caps, not
+     the session's raised ones — and no silent escalation. */
+  const keyOk = session && verifySessionKey(sessionKey, now, policy).ok;
+  const sessionApplies = Boolean(session) && (session.requireKey !== true || keyOk || origin !== 'intent');
+  if (session && session.requireKey === true && origin === 'intent' && !keyOk) {
+    return { ok: false, code: sessionKey ? 'BAD_SESSION_KEY' : 'SESSION_KEY_REQUIRED' };
+  }
+
+  const perTx = sessionApplies && session.perTxUsd != null ? session.perTxUsd : policy.perTxLimitUsd;
   if (amount > perTx) return { ok: false, code: 'OVER_TX_LIMIT', remainingUsd: perTx };
 
   const spent = loadSpend(now);
-  const daily = policy.dailyLimitUsd + (session?.bonusUsd ?? 0);
+  const daily = policy.dailyLimitUsd + (sessionApplies ? (session.bonusUsd ?? 0) : 0);
   const remaining = Math.max(0, daily - spent.usd);
   if (amount > remaining) return { ok: false, code: 'OVER_DAILY_LIMIT', remainingUsd: remaining };
 
   const needsConfirm = amount >= policy.requireConfirmAboveUsd;
-  return { ok: true, remainingUsd: remaining - amount, needsConfirm };
+  return { ok: true, remainingUsd: remaining - amount, needsConfirm, sessionKeyUsed: Boolean(sessionApplies && session) };
 }
 
 export function addGuardian(address) {
@@ -186,9 +288,10 @@ export function removeGuardian(address) {
 }
 
 export function addAllowlist(address) {
-  if (!isAddr(address)) return { error: 'BAD_ADDRESS' };
+  const checked = validateDestination(address);
+  if (!checked.ok) return { error: 'BAD_ADDRESS' };
   const policy = loadPolicy();
-  const next = address.trim();
+  const next = checked.value;
   if (policy.allowlist.some((g) => g.toLowerCase() === next.toLowerCase())) {
     return { error: 'DUPLICATE' };
   }
