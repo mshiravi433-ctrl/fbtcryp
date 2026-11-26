@@ -16,8 +16,6 @@ import { IconChevronRight } from '../Icons';
 import '../../styles/wallet-command.css';
 import '../../styles/opportunity-dashboard.css';
 
-const TABS = ['overview', 'opportunity', 'risk', 'pnl', 'security', 'defi', 'nft', 'alerts'];
-
 /**
  * ONE SHEET FOR THE WHOLE WALLET BRAIN.
  *
@@ -91,21 +89,6 @@ export default function WalletCommandSheet({ open, onClose, initialTab = 'overvi
   return (
     <Sheet open={open} onClose={onClose} title={t('wnew.title')} anchor="bottom" size="lg" headerAction={smartButton} testId="wallet-command-sheet">
       <div className="wcmd">
-        <div className="wcmd-tabs" role="tablist" aria-label={t('wnew.title')}>
-          {TABS.map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="tab"
-              aria-selected={tab === k}
-              className={`wcmd-tab ${tab === k ? 'is-active' : ''}`}
-              onClick={() => setTab(k)}
-            >
-              {t(`wnew.tab.${k}`)}
-            </button>
-          ))}
-        </div>
-
         {tab === 'overview' && (
           <div className="wcmd-panel" role="tabpanel">
             <div className="wcmd-grid">

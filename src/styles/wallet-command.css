@@ -51,9 +51,28 @@
 .btc-hub-action { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 7px; }
 .btc-hub-action span { font-size: 17px; font-weight: 800; line-height: 1; }
 .btc-hub-action-send { background: linear-gradient(135deg, rgba(247, 147, 26, 0.22), rgba(255, 179, 0, 0.08)); border-color: rgba(247, 147, 26, 0.45); }
-.btc-hub-action-recv { background: linear-gradient(135deg, rgba(0, 229, 255, 0.16), rgba(124, 77, 255, 0.08)); border-color: rgba(0, 229, 255, 0.35); }
+.btc-hub-action-recv { background: linear-gradient(135deg, rgba(247, 147, 26, 0.22), rgba(255, 179, 0, 0.08)); border-color: rgba(247, 147, 26, 0.45); }
+.btc-hub-action-send, .btc-hub-action-recv { color: #ffd479; }
+.btc-hub-action-send:hover, .btc-hub-action-recv:hover { border-color: #f7a31a; color: #ffe6a8; }
+
+/* Send-sheet asset row: one horizontal strip of real token logos. */
+.xfer-chips-assets { gap: 8px; padding-bottom: 8px; }
+.xfer-chips-assets .xfer-chip { min-height: 40px; padding: 7px 13px; }
+.xfer-chips-assets .xfer-chip svg, .xfer-chips-assets .xfer-chip img { width: 20px; height: 20px; flex: 0 0 20px; }
 
 /* ── OPTIMIZER ─────────────────────────────────────────────────────────── */
+/* ONE full-screen sheet, not a second stacked dialog. The body scrolls and
+   the header stays reachable at every viewport height. */
+.sheet-layer-bottom .sheet.sheet-full {
+  width: min(720px, 100%);
+  max-width: none;
+  height: 94dvh;
+  max-height: 94dvh;
+  border-radius: 24px 24px 0 0;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom));
+}
+.sheet-full .sheet-body { padding-inline: 2px; }
+.sheet-full .wopt { gap: 16px; }
 .wopt { display: grid; gap: 12px; }
 .wopt-head {
   display: grid;

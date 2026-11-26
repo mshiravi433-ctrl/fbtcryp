@@ -1109,3 +1109,37 @@
   text-align: end;
   white-space: nowrap;
 }
+
+/* ── SOLANA: ONE DEFAULT-CLOSED NOTES DRAWER ──────────────────────────────
+   Three separate warning cards used to cover the bottom of the Solana wallet
+   and push the holdings off-screen. They now live in one modern <details>
+   that starts collapsed; the deep-link id is kept on the outer element. */
+.sol-wal-notes { padding: 0; overflow: hidden; }
+.sol-wal-notes > .sol-wal-both-sum {
+  padding: 2px 14px;
+  min-height: 54px;
+  font-size: 12.5px;
+}
+.sol-wal-notes-body {
+  display: grid;
+  gap: 14px;
+  padding: 0 14px 14px;
+  animation: sol-wal-notes-in 180ms ease-out;
+}
+.sol-wal-note {
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.sol-wal-note:first-child { border-top: 0; padding-top: 0; }
+.sol-wal-note h3 {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.sol-wal-note .p2p-steps { margin: 8px 0 0; padding-inline-start: 18px; }
+@keyframes sol-wal-notes-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}

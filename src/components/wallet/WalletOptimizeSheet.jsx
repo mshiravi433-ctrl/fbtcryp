@@ -45,7 +45,7 @@ export default function WalletOptimizeSheet({ open, onClose, portfolio = {}, wal
   const circumference = 2 * Math.PI * 42;
 
   return (
-    <Sheet open={open} onClose={onClose} title={t('wnew.opt.title')} anchor="bottom" size="lg" testId="wallet-optimize-sheet">
+    <Sheet open={open} onClose={onClose} title={t('wnew.opt.title')} anchor="bottom" size="lg" className="sheet-full" testId="wallet-optimize-sheet">
       <div className="wopt">
         <div className="wopt-head">
           <div className="wopt-ring" role="img" aria-label={`${t('wnew.opt.score')}: ${report.score ?? '—'}`}>

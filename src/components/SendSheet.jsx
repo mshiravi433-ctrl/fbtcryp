@@ -63,8 +63,6 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
   const [scanOpen, setScanOpen] = useState(false);
-  const [assetOpen, setAssetOpen] = useState(false);
-  const [assetQuery, setAssetQuery] = useState('');
   const [balance, setBalance] = useState(null);
   const [stage, setStage] = useState('form'); // form → confirm → sending → done
   const [error, setError] = useState(null);
@@ -629,23 +627,17 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
               said which. Only rendered when there is a real choice.
             */}
             <div className="xfer-label" style={{ marginTop: 15 }}>{t('send.asset')}</div>
-            {chainTokens.length > 6 ? (
-              <button
-                type="button"
-                className="xfer-chip xfer-chip-picker"
-                onClick={() => { setAssetQuery(''); setAssetOpen(true); }}
-                data-testid="send-asset-picker-open"
-              >
-                <TokenIcon token={token} chainId={wallet.chainId} size={18} />
-                <span>{token.symbol}</span>
-                <span className="faint">· {chainTokens.length} {t('wnew.sendAssetsCount')}</span>
-              </button>
-            ) : chainTokens.length > 1 ? (
-              <div className="xfer-chips">
+            {chainTokens.length > 1 ? (
+              /* Every token stays on ONE horizontal row with its own logo,
+                 exactly like the original send sheet. No second popup: a
+                 pickup list inside another popup hid the amount field and
+                 made a long wallet feel like it had no assets. */
+              <div className="xfer-chips xfer-chips-assets">
                 {chainTokens.map((tk) => (
                   <button
                     key={tk.symbol}
                     className={`xfer-chip ${token.symbol === tk.symbol ? 'active' : ''}`}
+                    data-testid="send-asset-chip"
                     onClick={() => {
                       setTokenSym(tk.symbol);
                       /* A figure typed for one asset is meaningless for another
@@ -653,8 +645,8 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
                       setAmount('');
                     }}
                   >
-                    <TokenIcon token={{ symbol: tk.symbol, address: tk.address, native: tk.native }} chainId={wallet.chainId} size={18} />
-                    {tk.symbol}
+                    <TokenIcon token={{ symbol: tk.symbol, address: tk.address, native: tk.native }} chainId={wallet.chainId} size={20} />
+                    <span>{tk.symbol}</span>
                   </button>
                 ))}
               </div>
@@ -726,33 +718,6 @@ export default function SendSheet({ open, onClose, token: initialToken = null, s
             </button>
           </div>
         )}
-      </Sheet>
-
-      {/* Long token lists move into their own searchable popup instead of
-          wrapping into a wall of chips that buries the amount field. */}
-      <Sheet open={assetOpen} onClose={() => setAssetOpen(false)} title={t('send.asset')} anchor="bottom">
-        <input
-          className="xfer-input xfer-input-ltr"
-          value={assetQuery}
-          onChange={(e) => setAssetQuery(e.target.value)}
-          placeholder={t('wnew.sendSearchAsset')}
-          aria-label={t('wnew.sendSearchAsset')}
-        />
-        <div className="xfer-chips" style={{ marginTop: 10 }}>
-          {chainTokens
-            .filter((tk) => String(tk.symbol).toLowerCase().includes(assetQuery.trim().toLowerCase()))
-            .map((tk) => (
-              <button
-                key={tk.symbol}
-                type="button"
-                className={`xfer-chip ${token.symbol === tk.symbol ? 'active' : ''}`}
-                onClick={() => { setTokenSym(tk.symbol); setAmount(''); setAssetOpen(false); }}
-              >
-                <TokenIcon token={tk} chainId={wallet.chainId} size={18} />
-                {tk.symbol}
-              </button>
-            ))}
-        </div>
       </Sheet>
 
       <QrScanner

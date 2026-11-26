@@ -14402,16 +14402,30 @@ export default function run() {
     const scanner = read('src/components/QrScanner.jsx');
     t('the QR scanner offers a torch instead of a dead close cross on mobile',
       /applyConstraints\(\{ advanced: \[\[?\{ torch/.test(scanner) || /torch: !torchOn/.test(scanner));
-    t('the send sheet moves long asset lists into a popup and warns on new addresses',
-      /send-asset-picker-open/.test(read('src/components/SendSheet.jsx'))
+    t('the send sheet keeps every asset on one horizontal logo row and warns on new addresses',
+      /xfer-chips-assets/.test(read('src/components/SendSheet.jsx'))
+      && !/send-asset-picker-open/.test(read('src/components/SendSheet.jsx'))
       && /xfer-unknown-card/.test(read('src/components/SendSheet.jsx')));
     t('backup files can be restored, not only downloaded',
       /importWalletBackup/.test(walletSrc) && /forceImportWalletBackup/.test(walletSrc)
       && /wallet-restore-file/.test(walletSrc));
-    t('the wallet opens one deep command sheet and a real optimizer',
+    t('the wallet opens one focused command sheet and one full-screen optimizer',
       /WalletCommandSheet/.test(walletSrc) && /WalletOptimizeSheet/.test(walletSrc)
-      && /wallet-command-smart/.test(read('src/components/wallet/WalletCommandSheet.jsx')));
+      && /wallet-command-smart/.test(read('src/components/wallet/WalletCommandSheet.jsx'))
+      && !/wcmd-tabs/.test(read('src/components/wallet/WalletCommandSheet.jsx'))
+      && /sheet-full/.test(read('src/components/wallet/WalletOptimizeSheet.jsx'))
+      && (walletSrc.match(/open={optimizeSheet}/g) || []).length === 1);
 
+
+    t('both bitcoin actions are gold and the receive popup shows the address QR',
+      /btc-hub-action-send/.test(hub) && /btc-hub-action-recv/.test(hub)
+      && /color: #ffd479/.test(read('src/styles/wallet-command.css'))
+      && /FancyQr/.test(read('src/components/BtcReceiveSheet.jsx')));
+    t('solana wallet notes live in one default-closed modern drawer',
+      /sol-wal-notes/.test(read('src/components/SolanaWalletTab.jsx'))
+      && /id="solana-wallet-which"/.test(read('src/components/SolanaWalletTab.jsx'))
+      && !/^\s*<details[^>]* open/m.test(read('src/components/SolanaWalletTab.jsx'))
+      && /sol-wal-notes-body/.test(read('src/styles/wallet-modern.css')));
     t('the wallet folds its own BTC into the displayed portfolio, priced like any asset',
       /useBtcHolding/.test(walletSrc)
       && /marketRows\?\.find\(\(c\) => c\.id === 'bitcoin'\)/.test(walletSrc)

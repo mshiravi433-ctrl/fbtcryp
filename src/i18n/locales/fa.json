@@ -6915,7 +6915,8 @@
     },
     "universe": {
       "unavailable": "فهرست توکن‌ها بارگذاری نشد. برای سواپ، آدرس مینت را بچسبان."
-    }
+    },
+    "walletNotesTitle": "نکات کیف پول و امنیت"
   },
   "install": {
     "title": "نصب FBT Swap",

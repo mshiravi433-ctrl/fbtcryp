@@ -6915,7 +6915,8 @@
     },
     "universe": {
       "unavailable": "Could not load the token list. Paste a mint address to swap it anyway."
-    }
+    },
+    "walletNotesTitle": "Wallet notes & security"
   },
   "install": {
     "title": "Install FBT Swap",
