@@ -236,7 +236,8 @@ export function createWcSession({
   optionalChains = [],
   methods = ['eth_signTypedData_v4', 'wallet_switchEthereumChain', 'wallet_addEthereumChain'],
   supportsChain = () => true,
-  defaultChain = chains[0]
+  defaultChain = chains[0],
+  initEthereumProvider = null
 } = {}) {
   /* Keep one immutable-by-convention copy across init(), modal repair and
      session restore. The WalletConnect SDK is allowed to mutate the object it
@@ -313,26 +314,25 @@ export function createWcSession({
    * of inside the SDK's own five-attempt backoff.
    */
   async function initProvider({ modal, relayOrder }) {
-    const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+    const sdk = initEthereumProvider ? null : (await import('@walletconnect/ethereum-provider')).EthereumProvider;
+    const init = initEthereumProvider ?? ((options) => sdk.init(options));
     const urls = Array.isArray(relayOrder) && relayOrder.length ? relayOrder : RELAY_URLS;
     let lastError = null;
     for (let i = 0; i < urls.length; i += 1) {
       const isLast = i === urls.length - 1;
       const budget = isLast ? TIMEOUT.initLast : TIMEOUT.initFirst;
       wcEvent(i ? 'relay_fallback_try' : 'relay_try', i);
-      let orphaned = true;
       try {
         const pending = Promise.resolve(
-          EthereumProvider.init({ ...initConfig(modal), relayUrl: urls[i] })
+          init({ ...initConfig(modal), relayUrl: urls[i] })
         );
-        /* Our bound fired but the SDK is still working: the instance that
-           eventually resolves is abandoned, so close it. */
-        pending.then((ghost) => {
-          if (orphaned) ghost?.disconnect?.().catch?.(() => {});
-        }, () => {});
+        /* Never disconnect an instance that finishes after the timeout. SDK
+           init can resurrect the existing session, and disconnect() revokes it
+           remotely (and may share a Core with the winning instance). Also a
+           pending.then cleanup runs before the await continuation even on a
+           successful init, which used to disconnect the winning provider. */
         // eslint-disable-next-line no-await-in-loop -- sequential failover is the point
         const instance = await withTimeout(pending, budget, 'WC_INIT_TIMEOUT');
-        orphaned = false;
         wcEvent(i ? 'provider_ready_fallback' : 'provider_ready', i);
         return instance;
       } catch (error) {
@@ -472,7 +472,10 @@ export function createWcSession({
     const dying = provider;
     provider = null;
     if (purge) purgeConnectionKeys();
-    if (dying) {
+    /* A silent restore failure is not a user's disconnect. In particular,
+       disconnect() revokes a restored session even if adapter setup or metadata
+       verification failed transiently. Preserve it for the next attempt. */
+    if (dying && purge) {
       try {
         await withTimeout(Promise.resolve(dying.disconnect()).catch(() => {}), TIMEOUT.teardown, 'WC_TEARDOWN');
       } catch {

@@ -518,7 +518,7 @@ export function WalletProvider({ children }) {
         const provider = new BrowserProvider(target, 'any');
         const accounts = await provider.send('eth_requestAccounts', []);
         if (!accounts?.[0]) throw new Error('NO_ACCOUNTS');
-        const net = await provider.getNetwork();
+        const net = await withTimeout(provider.getNetwork(), 5_000, 'WALLET_NETWORK_TIMEOUT');
 
         eip1193Ref.current = target;
         signerRef.current = await provider.getSigner();
@@ -683,7 +683,7 @@ export function WalletProvider({ children }) {
         const provider = new BrowserProvider(target, 'any');
         let cid = leaseRef.current?.chainId ?? DEFAULT_CHAIN;
         try {
-          const net = await provider.getNetwork();
+          const net = await withTimeout(provider.getNetwork(), 5_000, 'WALLET_NETWORK_TIMEOUT');
           const n = Number(net?.chainId);
           if (EVM_CHAINS[n]) cid = n;
         } catch { /* the leased chain stands */ }
@@ -887,13 +887,13 @@ export function WalletProvider({ children }) {
         );
         let addrFromSigner = null;
         try {
-          addrFromSigner = await signer.getAddress();
+          addrFromSigner = await withTimeout(signer.getAddress(), 5_000, 'WALLET_ADDRESS_TIMEOUT');
         } catch { /* the resolved address above stands */ }
         const finalAddr = addrFromSigner || resolvedAddr;
 
         let netChain = honestChain;
         try {
-          const net = await provider.getNetwork();
+          const net = await withTimeout(provider.getNetwork(), 5_000, 'WALLET_NETWORK_TIMEOUT');
           const n = Number(net?.chainId);
           if (Number.isInteger(n) && n > 0) netChain = EVM_CHAINS[n] ? n : (EVM_CHAINS[honestChain] ? honestChain : DEFAULT_CHAIN);
         } catch {
@@ -1028,8 +1028,13 @@ export function WalletProvider({ children }) {
         chainId: result.chainId,
         mode: 'wc'
       });
-      if (attached && announce) {
-        try { useAppStore.getState().notify('walletSessionRestored', 'success'); } catch { /* optional */ }
+      if (attached) {
+        setError(null);
+        if (announce) {
+          try { useAppStore.getState().notify('walletSessionRestored', 'success'); } catch { /* optional */ }
+        }
+      } else {
+        wcRestoreCodeRef.current = 'CONNECT_FAILED';
       }
       return attached;
     },
@@ -1440,7 +1445,15 @@ export function WalletProvider({ children }) {
       /* NOT `setRestoring(false)`: a failed rung is not a failed resume. While
          the lease is alive the app owes the user this wallet, and the ladder
          behind it is background work — see settleRestoring(). */
-      settleRestoring();
+      if (plan.action === 'wc' && wcRestoreCodeRef.current && wcRestoreCodeRef.current !== 'WC_BUSY'
+        && !addressRef.current && !restoreBlockedRef.current) {
+        // Keep the lease and retry in the background, but do not leave a
+        // failed attempt looking like an endless in-progress operation.
+        setRestoring(false);
+        setError(wcRestoreCodeRef.current);
+      } else {
+        settleRestoring();
+      }
     }
   }, [restoreInjected, restoreWcSession, rollLease, dropLease, settleRestoring]);
 
