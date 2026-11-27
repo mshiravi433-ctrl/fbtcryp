@@ -23,13 +23,13 @@ import {
   clearWalletLease,
   createWcSession,
   guardEip1193,
-  hasStoredSession,
+  storedSessionStatus,
+  purgeIndexedWcKeys,
   purgeConnectionKeys,
   purgeEmbeddedWalletKeys,
   purgeStaleProjectKeys,
   readWalletLease,
   rememberedMobileWallet,
-  storageFacts,
   walletLeaseMinutes,
   walletLeaseRemainingMinutes,
   walletRestoreDelay,
@@ -1181,7 +1181,8 @@ export function WalletProvider({ children }) {
         /* Only after the vault has PROVED it matches disk state: entering local
            mode is an explicit mode switch, so a live WalletConnect session is
            torn down here. A FAILED attach must not tear anything down. */
-        void wcRef.current?.disconnect();
+        if (wcRef.current) void wcRef.current.disconnect();
+    else void purgeIndexedWcKeys();
         signerRef.current = signer;
         eip1193Ref.current = createLocalEip1193Adapter({
           signer,
@@ -1227,7 +1228,8 @@ export function WalletProvider({ children }) {
         const { signer, secret } = await unlockVaultWithSecret(password, provider);
         /* Same teardown — and only AFTER the password has proven correct: a
            BAD_PASSWORD must leave an existing connection exactly as it was. */
-        void wcRef.current?.disconnect();
+        if (wcRef.current) void wcRef.current.disconnect();
+    else void purgeIndexedWcKeys();
         signerRef.current = signer;
         eip1193Ref.current = createLocalEip1193Adapter({
           signer,
@@ -1337,10 +1339,12 @@ export function WalletProvider({ children }) {
        not be judged by a flag set the last time it was visible. */
     const current = readWalletLease() ?? leaseRef.current;
     const hasVault = Boolean(loadVault());
+    const sessionStatus = await storedSessionStatus();
+    if (addressRef.current) return true;
     const plan = walletRestorePlan({
       lease: current,
       hasVault,
-      hasStoredSession: hasStoredSession()
+      hasStoredSession: sessionStatus === 'found'
     });
 
     if (plan.expired) {
@@ -1354,7 +1358,8 @@ export function WalletProvider({ children }) {
        * is one tap and asks the wallet for a fresh approval, which is the
        * honest price of a window that lapsed.
        */
-      const purged = hasStoredSession() ? purgeConnectionKeys() : 0;
+      const purged = purgeConnectionKeys();
+      await purgeIndexedWcKeys();
       clearWalletLease();
       leaseRef.current = null;
       setLease(null);
@@ -1392,7 +1397,7 @@ export function WalletProvider({ children }) {
      * so the lease is dropped now and the user is told the one true thing:
      * connect once more.
      */
-    if (plan.action === 'wc' && !hasStoredSession()) {
+    if (plan.action === 'wc' && sessionStatus === 'missing') {
       dropLease();
       restoreBlockedRef.current = 'missing';
       setRestoring(false);
@@ -1526,7 +1531,8 @@ export function WalletProvider({ children }) {
     /* WalletConnect first: tell the peer the session is over (bounded — a dead
        relay must never stall the UI) and purge the storage artifacts, then the
        injected listeners. */
-    void wcRef.current?.disconnect();
+    if (wcRef.current) void wcRef.current.disconnect();
+    else void purgeIndexedWcKeys();
     /* The SDK writes its storage asynchronously; a late write can resurrect
        keys after the synchronous purge, so a delayed second purge catches that
        window without blocking anything. */
@@ -1649,22 +1655,8 @@ export function WalletProvider({ children }) {
       if (stale) wcEvent('stale_project_purged', Number(stale));
     } catch { /* storage unavailable — nothing to migrate */ }
 
-    /*
-     * ORPHANED STORAGE HYGIENE.
-     *
-     * A stale deep-link choice or recent-wallet key makes the NEXT connect skip
-     * the modal and open a wallet app with a dead pairing, so an idle cold
-     * start that has nowhere to restore may clean the residue it can prove is
-     * dead: AppKit connection keys with no `wc@2:` session behind them.
-     * Vault-agnostic — the encrypted vault never uses these keys.
-     */
-    try {
-      const facts = storageFacts();
-      if (facts.orphanKeys && !addressRef.current) {
-        const purged = purgeConnectionKeys();
-        if (purged) wcEvent('orphan_storage_purged', Number(purged));
-      }
-    } catch { /* the check is advisory */ }
+    // Do not purge apparent localStorage orphans on boot: the SDK session may
+    // be in IndexedDB, and a synchronous localStorage probe cannot prove absence.
 
     /*
      * ONE RESUME, DRIVEN BY THE LEASE.
@@ -1722,29 +1714,11 @@ export function WalletProvider({ children }) {
       );
     };
 
-    /* A LOCAL VAULT WINS ON COLD START: restore is async while the vault
-       auto-attach is synchronous, so without this skip the slower resume would
-       overwrite the vault. The stored session is left on disk either way. */
+    // A live external lease is the user's last choice, even if a local vault
+    // also exists. Without a lease, probe asynchronously for older WC sessions.
     const vault = loadVault();
-    const plan = walletRestorePlan({
-      lease: storedLease,
-      hasVault: Boolean(vault),
-      hasStoredSession: hasStoredSession()
-    });
-    /*
-     * Exactly two cases start a resume here:
-     *
-     *   • the lease LAPSED — `attemptWalletRestore()` is what clears the record
-     *     and purges the session it described, so even the expired path goes
-     *     through it (and it attaches nothing);
-     *   • there is no vault and the plan says WalletConnect or an injected
-     *     wallet — a vault always wins the cold start (above).
-     *
-     * 'local' needs no call: the vault effect below attaches synchronously.
-     * 'none' means there is nothing to do, and saying so with no call is the
-     * whole point of the plan.
-     */
-    if (plan.expired || (!vault && (plan.action === 'wc' || plan.action === 'injected'))) resume();
+    if (storedLease?.mode !== 'local' && storedLease) resume();
+    else if (!storedLease && !vault) resume();
 
     /*
      * COMING BACK TO A PAGE THAT WAS NEVER UNLOADED.
@@ -1795,6 +1769,8 @@ export function WalletProvider({ children }) {
   useEffect(() => {
     if (address) return undefined;
     if (!loadVault()) return undefined;
+    const remembered = readWalletLease();
+    if (remembered && remembered.mode !== 'local') return undefined;
     let cancelled = false;
     (async () => {
       const restored = await restoreLocalSession().catch(() => false);

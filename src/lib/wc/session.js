@@ -30,7 +30,7 @@ import { installWalletOpenBridge, onWalletHandoff, openWalletHandoff } from './h
 import { measureRelay, clearRelayCache } from './relay.js';
 import { verifyRelayLive } from './requestHandoff.js';
 import { installVerifyBudgetExtension, measureVerifyEnclave, warmVerifyEnclave } from './verify.js';
-import { hasStoredSession, purgeConnectionKeys } from './storage.js';
+import { hasStoredSession, storedSessionStatus, purgeIndexedWcKeys, purgeConnectionKeys } from './storage.js';
 import {
   classifyConnectError,
   isModalError,
@@ -485,7 +485,10 @@ export function createWcSession({
     /* disconnect() can finish asynchronous SDK storage writes after the first
        purge. Clear again only after the instance has settled, so an old
        localhost session cannot reappear on the next cold start. */
-    if (purge) purgeConnectionKeys();
+    if (purge) {
+      purgeConnectionKeys();
+      await purgeIndexedWcKeys();
+    }
   }
 
   /**
@@ -519,6 +522,7 @@ export function createWcSession({
          synchronously, here, is what makes the next attempt exactly like the
          first. */
       const purged = purgeConnectionKeys();
+      await purgeIndexedWcKeys();
       if (purged) wcEvent('storage_purged', purged);
 
       /* THE ATTESTATION HAS A FIVE-SECOND BUDGET, AND IT STARTS LATE.
@@ -768,11 +772,11 @@ export function createWcSession({
       syncChain(provider, chainId);
       return { ok: true, provider, address: provider.accounts[0], chainId, restored: true };
     }
-    if (provider) await release({ purge: false });
-    if (!hasStoredSession()) return { ok: false, code: 'WC_NO_SESSION' };
     busy = true;
     let instance = null;
     try {
+      if (provider) await release({ purge: false });
+      if (await storedSessionStatus() === 'missing') return { ok: false, code: 'WC_NO_SESSION' };
       /*
        * NO RELAY PROBE ON A SILENT RESTORE.
        *

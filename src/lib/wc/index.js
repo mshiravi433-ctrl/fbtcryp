@@ -120,6 +120,8 @@ export {
   RELAY_AUTH_PREFIX,
   WC_PREFIX,
   hasStoredSession,
+  storedSessionStatus,
+  purgeIndexedWcKeys,
   isConnectionKey,
   listConnectionKeys,
   listEmbeddedWalletKeys,
