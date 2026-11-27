@@ -1036,7 +1036,7 @@ export default function Wallet() {
     onEarn: () => navigate('/earn'),
     onOptimize: handleOptimize,
     canOptimize,
-    showBitcoin: bitcoinAvailable,
+    showBitcoin: false,
     onAssets: () => setSelectedChain('all'),
     onFarm: () => navigate('/farm'),
     onNft: () => navigate('/nft'),
