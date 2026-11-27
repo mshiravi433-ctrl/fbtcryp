@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTelegram } from '../context/TelegramContext';
-import MoreSheet from './MoreSheet';
+import MoreSheet from './LazyMoreSheet';
 import {
   AnimatedPlus,
   AnimatedSignal,

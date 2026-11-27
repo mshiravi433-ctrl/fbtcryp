@@ -1,4 +1,4 @@
-import MoreSheet from './components/MoreSheet';
+import MoreSheet from './components/LazyMoreSheet';
 import PageTabSwipe from './components/PageTabSwipe.jsx';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
