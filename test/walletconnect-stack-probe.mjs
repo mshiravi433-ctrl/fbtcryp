@@ -1496,7 +1496,7 @@ export default async function run() {
     /* A resume that CANNOT succeed must not spend 100 seconds pretending to
        retry: a `wc` lease whose `wc@2:` session is gone fails fast and says so. */
     t('an impossible WalletConnect resume fails fast instead of burning the ladder',
-      /plan\.action === 'wc' && !hasStoredSession\(\)/.test(ctxSrc) && /lease_session_missing/.test(ctxSrc));
+      /plan\.action === 'wc' && sessionStatus === 'missing'/.test(ctxSrc) && /lease_session_missing/.test(ctxSrc));
     t('a session removed between the storage probe and AppKit restore is terminal, not retried for minutes',
       /wcRestoreCodeRef\.current === 'WC_NO_SESSION'/.test(ctxSrc)
         && /purgeConnectionKeys\(\)[\s\S]{0,120}dropLease\(\)[\s\S]{0,160}setError\('SESSION_MISSING'\)/.test(ctxSrc));
@@ -1863,16 +1863,14 @@ export default async function run() {
     t('the context reads the stack from one module, not from scattered files',
       /from '\.\.\/lib\/wc'/.test(ctx));
 
-    /* The boot hygiene, in the order it has to run: the retired surface's keys
-       first (one of them makes the SDK build a frame in a CONSTRUCTOR), then
-       the orphan check that counts what is left. */
-    t('the retired keys are purged before the orphan hygiene counts anything',
-      ctx.indexOf('purgeEmbeddedWalletKeys()') > -1
-        && ctx.indexOf('purgeEmbeddedWalletKeys()') < ctx.indexOf('storageFacts()'));
-    t('both purges name themselves in the trace',
-      /embedded_legacy_purged/.test(ctx) && /orphan_storage_purged/.test(ctx));
-    t('the orphan purge has no session-evidence gate left to consult',
-      !/sdkSessionFacts|hasEmailMarker|email_orphan_kept/.test(ctx));
+    /* The SDK's session can be in IndexedDB, so a localStorage-only orphan
+       check must not purge a connection on boot. Legacy embedded keys remain
+       safe to remove before initializing any SDK. */
+    t('retired embedded keys are purged without destructive orphan cleanup',
+      /purgeEmbeddedWalletKeys\(\)/.test(ctx) && !/orphan_storage_purged/.test(ctx));
+    t('the legacy purge names itself in the trace', /embedded_legacy_purged/.test(ctx));
+    t('the session probe accounts for IndexedDB before making a restore plan',
+      /await storedSessionStatus\(\)/.test(ctx));
 
     /* ONE resume, THREE transports, no sequencing.
        The stored `wc@2:` session used to wait behind an email restore that
@@ -1883,8 +1881,8 @@ export default async function run() {
     t('the resume is plan-driven, not a single WalletConnect attempt',
       /walletRestorePlan\(/.test(ctx) && /restoreWcSession\(\{ announce: false \}\)/.test(ctx)
         && !/resumeEmailThenWc/.test(ctx));
-    t('a local vault still wins the cold start',
-      /!vault && \(plan\.action === 'wc' \|\| plan\.action === 'injected'\)/.test(ctx));
+    t('a remembered external wallet wins over a saved local vault',
+      /remembered && remembered.mode !== 'local'/.test(ctx) && /storedLease\?\.mode !== 'local'/.test(ctx));
     t('a failed resume is retried on a bounded ladder, not abandoned',
       /scheduleWalletRestore/.test(ctx) && /walletRestoreDelay\(/.test(ctx));
     t('an injected wallet is re-attached silently — never with a prompt',
@@ -1893,7 +1891,7 @@ export default async function run() {
     t('an explicit disconnect drops the lease first', (() => {
       const at = ctx.indexOf('const disconnect = useCallback');
       const body = ctx.slice(at, at + 900);
-      return body.indexOf('dropLease()') > -1 && body.indexOf('dropLease()') < body.indexOf('wcRef.current?.disconnect()');
+      return body.indexOf('dropLease()') > -1 && body.indexOf('dropLease()') < body.indexOf('wcRef.current.disconnect()');
     })());
     /* The balance contract, asserted on CODE (this probe strips comments):
        the failure branch of refreshBalance must not blank the number the user

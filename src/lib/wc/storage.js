@@ -322,3 +322,103 @@ export function hasStoredSession(storage) {
   }
   return false;
 }
+
+/**
+ * WalletConnect's browser SDK 1.1.1 migrates its store from localStorage to
+ * IndexedDB (WALLET_CONNECT_V2_INDEXED_DB / keyvaluestorage). unstorage also
+ * normalizes '/' to ':'. A localStorage-only probe is therefore not evidence
+ * that a returning session is missing. Never return 'missing' when the DB
+ * could not be read: only the SDK can decide in that case.
+ */
+export async function storedSessionStatus({ indexedDb = globalThis.indexedDB, timeoutMs = 3000 } = {}) {
+  if (hasStoredSession()) return 'found';
+  if (!indexedDb?.open) {
+    try { return typeof localStorage !== 'undefined' ? 'missing' : 'unknown'; }
+    catch { return 'unknown'; }
+  }
+  return new Promise((resolve) => {
+    let done = false;
+    let db;
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { db?.close(); } catch { /* optional */ }
+      resolve(result);
+    };
+    const timer = setTimeout(() => finish('unknown'), timeoutMs);
+    try {
+      const request = indexedDb.open('WALLET_CONNECT_V2_INDEXED_DB');
+      request.onupgradeneeded = () => {
+        // This database did not exist. Do not leave an empty one behind.
+        try { request.transaction.abort(); } catch { /* noop */ }
+        finish('missing');
+      };
+      request.onerror = () => finish('unknown');
+      request.onblocked = () => finish('unknown');
+      request.onsuccess = () => {
+        db = request.result;
+        if (done) { db.close(); return; }
+        if (!db.objectStoreNames.contains('keyvaluestorage')) return finish('unknown');
+        const tx = db.transaction('keyvaluestorage', 'readonly');
+        const cursor = tx.objectStore('keyvaluestorage').openCursor();
+        tx.onerror = () => finish('unknown');
+        cursor.onerror = () => finish('unknown');
+        cursor.onsuccess = () => {
+          const item = cursor.result;
+          if (!item) return finish('missing');
+          const key = String(item.key || '');
+          if (/^wc@2:.*(?:::|\/\/)session$/i.test(key)) {
+            try {
+              const value = typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
+              if (Array.isArray(value) && value.length) return finish('found');
+            } catch { return finish('unknown'); }
+          }
+          item.continue();
+        };
+      };
+    } catch { finish('unknown'); }
+  });
+}
+
+/** Clear the SDK's IndexedDB connection state for an explicit reset only. */
+export async function purgeIndexedWcKeys({ indexedDb = globalThis.indexedDB, timeoutMs = 3000 } = {}) {
+  if (!indexedDb?.open) return false;
+  return new Promise((resolve) => {
+    let done = false;
+    let db;
+    let tx;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { db?.close(); } catch { /* noop */ }
+      resolve(ok);
+    };
+    const timer = setTimeout(() => {
+      try { tx?.abort(); } catch { /* already settled */ }
+      finish(false);
+    }, timeoutMs);
+    try {
+      const request = indexedDb.open('WALLET_CONNECT_V2_INDEXED_DB');
+      request.onupgradeneeded = () => { try { request.transaction.abort(); } catch { /* noop */ } finish(true); };
+      request.onerror = () => finish(false);
+      request.onblocked = () => finish(false);
+      request.onsuccess = () => {
+        db = request.result;
+        if (done) { db.close(); return; }
+        if (!db.objectStoreNames.contains('keyvaluestorage')) return finish(false);
+        tx = db.transaction('keyvaluestorage', 'readwrite');
+        const cursor = tx.objectStore('keyvaluestorage').openCursor();
+        tx.oncomplete = () => finish(true);
+        tx.onerror = tx.onabort = () => finish(false);
+        cursor.onsuccess = () => {
+          const item = cursor.result;
+          if (!item) return;
+          if (String(item.key).startsWith('wc@2:')) item.delete();
+          item.continue();
+        };
+      };
+    } catch { finish(false); }
+  });
+}
