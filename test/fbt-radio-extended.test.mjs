@@ -52,19 +52,25 @@ test('all ten requested subjects are two-host conversations', () => {
   ];
   assert.deepEqual(manifest.dialogue.map((chapter) => chapter.title), expected);
 
-  assert.equal(manifest.version, 5);
+  assert.equal(manifest.version, 6);
   assert.equal(manifest.dialogue.length, 10);
-  for (const chapter of manifest.dialogue) {
+  assert.ok(manifest.turnPauseSeconds >= 0.4, 'hosts have room for a natural conversational pause');
+  const expectedSpeakerOrder = [
+    ['امیر', 'رها'], ['رها', 'امیر'], ['امیر', 'رها'], ['رها', 'امیر'], ['رها', 'امیر'],
+    ['رها', 'امیر'], ['امیر', 'رها'], ['رها', 'امیر'], ['امیر', 'رها'], ['رها', 'امیر']
+  ];
+  for (const [index, chapter] of manifest.dialogue.entries()) {
     assert.equal(chapter.turns.length, 2, `${chapter.id} has two turns`);
     assert.notEqual(chapter.turns[0].speaker, chapter.turns[1].speaker);
-    assert.ok(chapter.turns.every((turn) => turn.audio.endsWith('.mp3')));
+    assert.deepEqual(chapter.turns.map((turn) => turn.speaker), expectedSpeakerOrder[index]);
+    assert.ok(chapter.turns.every((turn) => turn.audio.includes('fbt-radio-dialogue-v6-') && turn.audio.endsWith('.mp3')));
   }
   assert.equal(manifest.interludes.length, 4);
   assert.equal(new Set(manifest.dialogue.map((chapter) => chapter.music)).size, 10);
 });
 
 test('the app and both player pages request the current version and expose synced chapters', () => {
-  assert.match(engine, /fbt-radio-2h\.mp3\?v=20261127-dialogue-v5/);
+  assert.match(engine, /fbt-radio-2h\.mp3\?v=20261127-dialogue-v6/);
   assert.match(player, /FBT_RADIO_CHAPTERS/);
   assert.match(player, /FBT_RADIO_TOPIC_COUNT/);
   for (const chapter of manifest.dialogue) {
@@ -100,7 +106,7 @@ test('the production output includes the standalone player and its chapter downl
     assert.deepEqual(emitted, ['radio_fbt.html', 'FBT_Radio_2Hours_chapters.txt']);
 
     const deployedPlayer = readFileSync(join(outDir, 'radio_fbt.html'), 'utf8');
-    assert.match(deployedPlayer, /20261127-dialogue-v5/);
+    assert.match(deployedPlayer, /20261127-dialogue-v6/);
     assert.match(deployedPlayer, /src="\/radio\/fbt-radio-cover\.jpg"/);
     assert.match(deployedPlayer, /href="FBT_Radio_2Hours_chapters\.txt"/);
     assert.equal(

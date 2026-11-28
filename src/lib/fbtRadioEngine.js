@@ -28,7 +28,7 @@ import { FBT_RADIO_DURATION_SECONDS } from './fbtRadioMetadata';
 
 export const FBT_RADIO_URL =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FBT_RADIO_URL) ||
-  '/radio/fbt-radio-2h.mp3?v=20261127-dialogue-v5';
+  '/radio/fbt-radio-2h.mp3?v=20261127-dialogue-v6';
 
 let el = null;
 let wired = false;

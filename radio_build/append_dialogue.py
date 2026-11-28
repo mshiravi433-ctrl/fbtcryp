@@ -63,13 +63,16 @@ VOICE_BEDS = {
     "outro": {"bpm": 80, "prog": "lofi", "seed": 76, "cutoff": 2000, "transpose": 0},
 }
 
+# Keep the selected voices' expressive dynamics instead of crushing every phrase
+# to one level. A light compressor controls peaks; gentle EQ and normalization keep
+# the narration clear without making it sound over-processed.
 VOICE_FILTER = (
-    "highpass=f=80,"
-    "equalizer=f=190:t=q:w=1.1:g=-2.5,"
-    "equalizer=f=2600:t=q:w=1.3:g=2.2,"
-    "equalizer=f=7200:t=q:w=1.0:g=1.5,"
-    "acompressor=threshold=-19dB:ratio=3.2:attack=6:release=170:makeup=2.5,"
-    "loudnorm=I=-16:TP=-1.5:LRA=9"
+    "highpass=f=70,"
+    "equalizer=f=190:t=q:w=1.1:g=-1.2,"
+    "equalizer=f=2600:t=q:w=1.3:g=1.0,"
+    "equalizer=f=7200:t=q:w=1.0:g=0.6,"
+    "acompressor=threshold=-22dB:ratio=1.6:attack=14:release=240:makeup=1.0,"
+    "loudnorm=I=-17:TP=-1.5:LRA=11"
 )
 
 

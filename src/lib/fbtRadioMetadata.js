@@ -1,6 +1,6 @@
 /* Static metadata for the versioned, single-stream FBT Radio master. */
-export const FBT_RADIO_DURATION_SECONDS = 8143.10;
-export const FBT_RADIO_DURATION_LABEL = '۲ ساعت و ۱۵ دقیقه';
+export const FBT_RADIO_DURATION_SECONDS = 8024.66;
+export const FBT_RADIO_DURATION_LABEL = '۲ ساعت و ۱۳ دقیقه';
 export const FBT_RADIO_TOPIC_COUNT = 10;
 
 /** The app box highlights the original editorial chapters plus the new lessons. */
@@ -18,13 +18,13 @@ export const FBT_RADIO_CHAPTERS = Object.freeze([
   { t: 2584.85, label: "آموزش ترید" },
   { t: 2640.17, label: "امنیت کیف پول" },
   { t: 7218.0, label: "تاریخچه کریپتو" },
-  { t: 7268.89, label: "شناخت ترید و نمودار شمعی" },
-  { t: 7378.12, label: "ونوم و dYdX" },
-  { t: 7433.85, label: "سواپ و سیگنال" },
-  { t: 7547.83, label: "والت، والت‌کانکت و نگهداری امن" },
-  { t: 7601.28, label: "شبکه‌ها و تفاوت‌هایشان" },
-  { t: 7727.2, label: "فارم و شرایط استفاده" },
-  { t: 7811.05, label: "FBT جهانی و اسمارت‌مانی" },
-  { t: 7941.91, label: "فیوچرز و تفاوت تب‌ها" },
-  { t: 8041.31, label: "استفاده از سفارش خودکار" }
+  { t: 7267.54, label: "شناخت ترید و نمودار شمعی" },
+  { t: 7388.06, label: "ونوم و dYdX" },
+  { t: 7442.72, label: "سواپ و سیگنال" },
+  { t: 7560.96, label: "والت، والت‌کانکت و نگهداری امن" },
+  { t: 7630.14, label: "شبکه‌ها و تفاوت‌هایشان" },
+  { t: 7737.46, label: "فارم و شرایط استفاده" },
+  { t: 7791.24, label: "FBT جهانی و اسمارت‌مانی" },
+  { t: 7901.4, label: "فیوچرز و تفاوت تب‌ها" },
+  { t: 7956.02, label: "استفاده از سفارش خودکار" }
 ]);

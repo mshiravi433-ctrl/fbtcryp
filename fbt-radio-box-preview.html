@@ -52,7 +52,7 @@
       </div>
 
       <div class="fbr-body">
-        <p class="fbr-kicker">برنامهٔ ۲ ساعت و ۱۵ دقیقه‌ای · گفت‌وگوی دو میزبان</p>
+        <p class="fbr-kicker">برنامهٔ ۲ ساعت و ۱۳ دقیقه‌ای · گفت‌وگوی دو میزبان</p>
         <h2 class="fbr-title">رادیو <b>اف‌بی‌تی</b>
           <span class="fbr-wave" aria-hidden="true">
             <i style="animation-delay:-0s"></i><i style="animation-delay:-.12s"></i><i style="animation-delay:-.24s"></i><i style="animation-delay:-.36s"></i>
@@ -63,7 +63,7 @@
         </h2>
         <p class="fbr-sub" id="sub">برای شروع، دکمهٔ پخش را لمس کن</p>
         <div class="fbr-chips">
-          <span class="fbr-chip">۲ ساعت و ۱۵ دقیقه</span>
+          <span class="fbr-chip">۲ ساعت و ۱۳ دقیقه</span>
           <span class="fbr-chip">۱۰ فصل آموزشی تازه</span>
           <span class="fbr-chip">موسیقی اختصاصی بی‌تکرار</span>
           <span class="fbr-chip fbr-chip-whale">🐋 رادار نهنگ‌ها</span>
@@ -79,8 +79,8 @@
       </div>
       <div class="fbr-times">
         <span id="cur">۰:۰۰</span>
-        <span class="fbr-remain" id="rem">−۲:۱۵:۴۳</span>
-        <span id="dur">۲:۱۵:۴۳</span>
+        <span class="fbr-remain" id="rem">−۲:۱۳:۴۴</span>
+        <span id="dur">۲:۱۳:۴۴</span>
       </div>
     </div>
 
@@ -92,7 +92,7 @@
       <button type="button" class="fbr-ctl" id="fwd"><span class="fbr-ctl-g">↻</span><small>۳۰</small></button>
       <button type="button" class="fbr-ctl" id="mute">🔊</button>
       <button type="button" class="fbr-ctl fbr-rate" id="rate">×۱</button>
-      <a class="fbr-ctl fbr-dl" href="/radio/fbt-radio-2h.mp3?v=20261127-dialogue-v5" download>⤓</a>
+      <a class="fbr-ctl fbr-dl" href="/radio/fbt-radio-2h.mp3?v=20261127-dialogue-v6" download>⤓</a>
     </div>
 
     <div class="fbr-chapters" id="chapters"></div>
@@ -105,7 +105,7 @@
 const FA='۰۱۲۳۴۵۶۷۸۹';
 const fa=(v)=>String(v).replace(/\d/g,d=>FA[+d]);
 const clock=(s)=>{s=Math.max(0,Math.floor(s||0));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;const p=n=>fa(String(n).padStart(2,'0'));return h?`${fa(h)}:${p(m)}:${p(r)}`:`${fa(m)}:${p(r)}`};
-const DEFAULT_DURATION=8143.10;
+const DEFAULT_DURATION=8024.66;
 const CHAPTERS=[
  [9,"معرفی رادیو FBT"],
  [637.08,"کریپتو چیست؟"],
@@ -120,15 +120,15 @@ const CHAPTERS=[
  [2584.85,"آموزش ترید"],
  [2640.17,"امنیت کیف پول"],
  [7218.0,"تاریخچه کریپتو"],
- [7268.89,"شناخت ترید و نمودار شمعی"],
- [7378.12,"ونوم و dYdX"],
- [7433.85,"سواپ و سیگنال"],
- [7547.83,"والت، والت‌کانکت و نگهداری امن"],
- [7601.28,"شبکه‌ها و تفاوت‌هایشان"],
- [7727.2,"فارم و شرایط استفاده"],
- [7811.05,"FBT جهانی و اسمارت‌مانی"],
- [7941.91,"فیوچرز و تفاوت تب‌ها"],
- [8041.31,"استفاده از سفارش خودکار"]
+ [7267.54,"شناخت ترید و نمودار شمعی"],
+ [7388.06,"ونوم و dYdX"],
+ [7442.72,"سواپ و سیگنال"],
+ [7560.96,"والت، والت‌کانکت و نگهداری امن"],
+ [7630.14,"شبکه‌ها و تفاوت‌هایشان"],
+ [7737.46,"فارم و شرایط استفاده"],
+ [7791.24,"FBT جهانی و اسمارت‌مانی"],
+ [7901.4,"فیوچرز و تفاوت تب‌ها"],
+ [7956.02,"استفاده از سفارش خودکار"]
 ];
 const box=document.getElementById('box'), sub=document.getElementById('sub');
 const rail=document.getElementById('rail'), fill=document.getElementById('fill'), buf=document.getElementById('buf'), knob=document.getElementById('knob');
@@ -143,7 +143,7 @@ CHAPTERS.forEach(([t,label])=>{
   document.getElementById('chapters').appendChild(b);
 });
 
-const a=new Audio('/radio/fbt-radio-2h.mp3?v=20261127-dialogue-v5');
+const a=new Audio('/radio/fbt-radio-2h.mp3?v=20261127-dialogue-v6');
 a.preload='metadata'; a.volume=.85;
 
 function tick(){

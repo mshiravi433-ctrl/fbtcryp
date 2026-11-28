@@ -1,5 +1,5 @@
 PERFORMER "FBT Radio"
-TITLE "FBT Radio — پخش ۲ ساعت و ۱۵ دقیقه‌ای دنیای کریپتو"
+TITLE "FBT Radio — پخش ۲ ساعت و ۱۳ دقیقه‌ای دنیای کریپتو"
 FILE "public/radio/fbt-radio-2h.mp3" MP3
   TRACK 01 AUDIO
     TITLE "معرفی رادیو FBT"
@@ -180,56 +180,56 @@ FILE "public/radio/fbt-radio-2h.mp3" MP3
   TRACK 45 AUDIO
     TITLE "شناخت ترید و نمودار شمعی"
     PERFORMER "FBT Radio"
-    INDEX 01 121:08:67
+    INDEX 01 121:07:41
   TRACK 46 AUDIO
     TITLE "موسیقی اختصاصی — مکث روی نمودار"
     PERFORMER "FBT Radio"
-    INDEX 01 121:58:09
+    INDEX 01 122:08:04
   TRACK 47 AUDIO
     TITLE "ونوم و dYdX"
     PERFORMER "FBT Radio"
-    INDEX 01 122:58:09
+    INDEX 01 123:08:04
   TRACK 48 AUDIO
     TITLE "سواپ و سیگنال"
     PERFORMER "FBT Radio"
-    INDEX 01 123:53:64
+    INDEX 01 124:02:54
   TRACK 49 AUDIO
     TITLE "موسیقی اختصاصی — مسیرهای نقدینگی"
     PERFORMER "FBT Radio"
-    INDEX 01 124:47:62
+    INDEX 01 125:00:72
   TRACK 50 AUDIO
     TITLE "والت، والت‌کانکت و نگهداری امن"
     PERFORMER "FBT Radio"
-    INDEX 01 125:47:62
+    INDEX 01 126:00:72
   TRACK 51 AUDIO
     TITLE "شبکه‌ها و تفاوت‌هایشان"
     PERFORMER "FBT Radio"
-    INDEX 01 126:41:21
+    INDEX 01 127:10:10
   TRACK 52 AUDIO
     TITLE "موسیقی اختصاصی — نقشه شبکه‌ها"
     PERFORMER "FBT Radio"
-    INDEX 01 127:47:15
+    INDEX 01 127:57:35
   TRACK 53 AUDIO
     TITLE "فارم و شرایط استفاده"
     PERFORMER "FBT Radio"
-    INDEX 01 128:47:15
+    INDEX 01 128:57:35
   TRACK 54 AUDIO
     TITLE "FBT جهانی و اسمارت‌مانی"
     PERFORMER "FBT Radio"
-    INDEX 01 130:11:04
+    INDEX 01 129:51:18
   TRACK 55 AUDIO
     TITLE "موسیقی اختصاصی — آرامش پیش از تصمیم"
     PERFORMER "FBT Radio"
-    INDEX 01 131:21:68
+    INDEX 01 130:41:30
   TRACK 56 AUDIO
     TITLE "فیوچرز و تفاوت تب‌ها"
     PERFORMER "FBT Radio"
-    INDEX 01 132:21:68
+    INDEX 01 131:41:30
   TRACK 57 AUDIO
     TITLE "استفاده از سفارش خودکار"
     PERFORMER "FBT Radio"
-    INDEX 01 134:01:23
+    INDEX 01 132:36:02
   TRACK 58 AUDIO
     TITLE "موسیقی اختصاصی — پایان برنامه"
     PERFORMER "FBT Radio"
-    INDEX 01 135:25:07
+    INDEX 01 133:26:50

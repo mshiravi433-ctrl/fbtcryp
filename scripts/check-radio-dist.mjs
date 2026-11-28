@@ -11,7 +11,7 @@ const streamPath = resolve(dist, 'radio/fbt-radio-2h.mp3');
 const coverPath = resolve(dist, 'radio/fbt-radio-cover.jpg');
 const player = readFileSync(playerPath, 'utf8');
 
-assert.match(player, /20261127-dialogue-v5/, 'standalone page is the current radio version');
+assert.match(player, /20261127-dialogue-v6/, 'standalone page is the current radio version');
 assert.match(player, /src="\/radio\/fbt-radio-cover\.jpg"/, 'cover resolves from the public radio directory');
 assert.match(player, /href="FBT_Radio_2Hours_chapters\.txt"/, 'chapter download link resolves beside the page');
 assert.equal(
