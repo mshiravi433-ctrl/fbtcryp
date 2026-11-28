@@ -14,7 +14,10 @@ test('production deployment fails closed when model files cannot be fetched or v
   assert.match(fetchScript, /process\.exit\(required \? 1 : 0\)/);
 });
 
-test('production build exercises the emitted ORT bundle against shipped model assets', () => {
-  assert.match(pkg.scripts['build:full'], /vite build && npm run test:kronos-dist &&/);
+test('production build verifies radio assets and exercises the emitted ORT bundle', () => {
+  assert.match(
+    pkg.scripts['build:full'],
+    /vite build && node scripts\/check-radio-dist\.mjs && npm run test:kronos-dist &&/
+  );
   assert.match(pkg.scripts['test:kronos-dist'], /KRONOS_DIST_REQUIRED=1/);
 });
