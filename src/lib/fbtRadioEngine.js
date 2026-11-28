@@ -7,10 +7,10 @@
  * rather than like a video that stops when you scroll away.
  *
  * ─── THE URL ────────────────────────────────────────────────────────────────
- * `/radio/fbt-radio-2h.mp3` is the 48 kbps mono stream build of the 2-hour
- * broadcast, served from this site's own origin (public/radio). Same origin
- * matters twice: no CORS dance for a media element, and Range requests work,
- * so seeking into the second hour does not re-download the first.
+ * `/radio/fbt-radio-2h.mp3` is the versioned 48 kbps mono stream build of the
+ * 2-hour, 15-minute broadcast, served from this site's own origin
+ * (public/radio). Same origin matters twice: no CORS dance for a media element,
+ * and Range requests work, so seeking deep into the programme stays efficient.
  *
  * `VITE_FBT_RADIO_URL` overrides it for a CDN without touching the component.
  *
@@ -24,10 +24,11 @@
  */
 import { useFbtRadioStore } from '../store/useFbtRadioStore';
 import { useRadioStore } from '../store/useRadioStore';
+import { FBT_RADIO_DURATION_SECONDS } from './fbtRadioMetadata';
 
 export const FBT_RADIO_URL =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FBT_RADIO_URL) ||
-  '/radio/fbt-radio-2h.mp3';
+  '/radio/fbt-radio-2h.mp3?v=20261127-dialogue-v5';
 
 let el = null;
 let wired = false;
@@ -51,10 +52,10 @@ export function ensureAudio() {
   el.addEventListener('waiting', () => patch({ error: false }));
   el.addEventListener('error', () => patch({ playing: false, error: true }));
   el.addEventListener('loadedmetadata', () =>
-    patch({ duration: Number.isFinite(el.duration) ? el.duration : 7200 })
+    patch({ duration: Number.isFinite(el.duration) ? el.duration : FBT_RADIO_DURATION_SECONDS })
   );
   el.addEventListener('durationchange', () =>
-    patch({ duration: Number.isFinite(el.duration) ? el.duration : 7200 })
+    patch({ duration: Number.isFinite(el.duration) ? el.duration : FBT_RADIO_DURATION_SECONDS })
   );
   el.addEventListener('timeupdate', () => patch({ time: el.currentTime || 0 }));
   el.addEventListener('progress', () => {
@@ -117,7 +118,7 @@ export function toggle() {
 
 export function seek(seconds) {
   const a = ensureAudio();
-  const max = Number.isFinite(a.duration) ? a.duration : 7200;
+  const max = Number.isFinite(a.duration) ? a.duration : FBT_RADIO_DURATION_SECONDS;
   const next = Math.min(Math.max(0, seconds), Math.max(0, max - 0.5));
   try {
     a.currentTime = next;

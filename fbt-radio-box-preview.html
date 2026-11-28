@@ -52,7 +52,7 @@
       </div>
 
       <div class="fbr-body">
-        <p class="fbr-kicker">برنامه دو ساعته · دنیای کریپتو</p>
+        <p class="fbr-kicker">برنامهٔ ۲ ساعت و ۱۵ دقیقه‌ای · گفت‌وگوی دو میزبان</p>
         <h2 class="fbr-title">رادیو <b>اف‌بی‌تی</b>
           <span class="fbr-wave" aria-hidden="true">
             <i style="animation-delay:-0s"></i><i style="animation-delay:-.12s"></i><i style="animation-delay:-.24s"></i><i style="animation-delay:-.36s"></i>
@@ -63,9 +63,9 @@
         </h2>
         <p class="fbr-sub" id="sub">برای شروع، دکمهٔ پخش را لمس کن</p>
         <div class="fbr-chips">
-          <span class="fbr-chip">۲ ساعت پیوسته</span>
-          <span class="fbr-chip">۴۲ فصل</span>
-          <span class="fbr-chip">۸ ترک اختصاصی</span>
+          <span class="fbr-chip">۲ ساعت و ۱۵ دقیقه</span>
+          <span class="fbr-chip">۱۰ فصل آموزشی تازه</span>
+          <span class="fbr-chip">موسیقی اختصاصی بی‌تکرار</span>
           <span class="fbr-chip fbr-chip-whale">🐋 رادار نهنگ‌ها</span>
         </div>
       </div>
@@ -79,8 +79,8 @@
       </div>
       <div class="fbr-times">
         <span id="cur">۰:۰۰</span>
-        <span class="fbr-remain" id="rem">−۲:۰۰:۰۰</span>
-        <span id="dur">۲:۰۰:۰۰</span>
+        <span class="fbr-remain" id="rem">−۲:۱۵:۴۳</span>
+        <span id="dur">۲:۱۵:۴۳</span>
       </div>
     </div>
 
@@ -92,12 +92,12 @@
       <button type="button" class="fbr-ctl" id="fwd"><span class="fbr-ctl-g">↻</span><small>۳۰</small></button>
       <button type="button" class="fbr-ctl" id="mute">🔊</button>
       <button type="button" class="fbr-ctl fbr-rate" id="rate">×۱</button>
-      <a class="fbr-ctl fbr-dl" href="/radio/fbt-radio-2h.mp3" download>⤓</a>
+      <a class="fbr-ctl fbr-dl" href="/radio/fbt-radio-2h.mp3?v=20261127-dialogue-v5" download>⤓</a>
     </div>
 
     <div class="fbr-chapters" id="chapters"></div>
 
-    <p class="fbr-note">موسیقی و صداها اختصاصی رادیو اف‌بی‌تی است · برنامه آموزشی است و توصیهٔ مالی نیست.</p>
+    <p class="fbr-note">گفت‌وگوی سناریویی دو میزبان با موسیقی تازه · آموزشی است، نه مصاحبهٔ زنده یا توصیهٔ مالی.</p>
   </section>
 </div>
 
@@ -105,11 +105,30 @@
 const FA='۰۱۲۳۴۵۶۷۸۹';
 const fa=(v)=>String(v).replace(/\d/g,d=>FA[+d]);
 const clock=(s)=>{s=Math.max(0,Math.floor(s||0));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;const p=n=>fa(String(n).padStart(2,'0'));return h?`${fa(h)}:${p(m)}:${p(r)}`:`${fa(m)}:${p(r)}`};
+const DEFAULT_DURATION=8143.10;
 const CHAPTERS=[
- [9,'معرفی رادیو FBT'],[637.08,'کریپتو چیست؟'],[690.56,'بیت‌کوین، پادشاه بازار'],
- [740.36,'اتریوم و آلت‌کوین‌ها'],[1120.42,'مصاحبه ویژه'],[1223.98,'رادار نهنگ‌ها'],
- [2080.05,'اخبار داغ کریپتو'],[2132.05,'آینده کریپتو'],[2470.53,'استیبل‌کوین و دیفای'],
- [2528.17,'ان‌اف‌تی و متاورس'],[2584.85,'آموزش ترید'],[2640.17,'امنیت کیف پول']
+ [9,"معرفی رادیو FBT"],
+ [637.08,"کریپتو چیست؟"],
+ [690.56,"بیت‌کوین، پادشاه بازار"],
+ [740.36,"اتریوم و آلت‌کوین‌ها"],
+ [1120.42,"مصاحبه: ساختار بازار"],
+ [1223.98,"رادار نهنگ‌ها"],
+ [2080.05,"اخبار داغ کریپتو"],
+ [2132.05,"آینده کریپتو"],
+ [2470.53,"استیبل‌کوین و دیفای"],
+ [2528.17,"ان‌اف‌تی و متاورس"],
+ [2584.85,"آموزش ترید"],
+ [2640.17,"امنیت کیف پول"],
+ [7218.0,"تاریخچه کریپتو"],
+ [7268.89,"شناخت ترید و نمودار شمعی"],
+ [7378.12,"ونوم و dYdX"],
+ [7433.85,"سواپ و سیگنال"],
+ [7547.83,"والت، والت‌کانکت و نگهداری امن"],
+ [7601.28,"شبکه‌ها و تفاوت‌هایشان"],
+ [7727.2,"فارم و شرایط استفاده"],
+ [7811.05,"FBT جهانی و اسمارت‌مانی"],
+ [7941.91,"فیوچرز و تفاوت تب‌ها"],
+ [8041.31,"استفاده از سفارش خودکار"]
 ];
 const box=document.getElementById('box'), sub=document.getElementById('sub');
 const rail=document.getElementById('rail'), fill=document.getElementById('fill'), buf=document.getElementById('buf'), knob=document.getElementById('knob');
@@ -124,11 +143,11 @@ CHAPTERS.forEach(([t,label])=>{
   document.getElementById('chapters').appendChild(b);
 });
 
-const a=new Audio('/radio/fbt-radio-2h.mp3');
+const a=new Audio('/radio/fbt-radio-2h.mp3?v=20261127-dialogue-v5');
 a.preload='metadata'; a.volume=.85;
 
 function tick(){
-  const d=a.duration||7200, p=(a.currentTime/d)*100;
+  const d=a.duration||DEFAULT_DURATION, p=(a.currentTime/d)*100;
   fill.style.width=p+'%'; knob.style.left=p+'%';
   cur.textContent=clock(a.currentTime); rem.textContent='−'+clock(d-a.currentTime); dur.textContent=clock(d);
   let idx=-1; CHAPTERS.forEach(([t],i)=>{ if(a.currentTime>=t) idx=i; });
@@ -153,14 +172,14 @@ a.addEventListener('pause',()=>{
 playBtn.onclick=()=>{ a.paused ? a.play().catch(()=>{}) : a.pause(); };
 document.getElementById('start').onclick=()=>a.play().catch(()=>{});
 document.getElementById('back').onclick=()=>{a.currentTime=Math.max(0,a.currentTime-30)};
-document.getElementById('fwd').onclick=()=>{a.currentTime=Math.min((a.duration||7200)-1,a.currentTime+30)};
+document.getElementById('fwd').onclick=()=>{a.currentTime=Math.min((a.duration||DEFAULT_DURATION)-1,a.currentTime+30)};
 document.getElementById('mute').onclick=(e)=>{a.muted=!a.muted; e.currentTarget.textContent=a.muted?'🔇':'🔊'};
 document.getElementById('rate').onclick=(e)=>{
   const rates=[1,1.25,1.5,.75]; const i=rates.indexOf(a.playbackRate);
   const r=rates[(i+1)%rates.length]; a.playbackRate=r; e.currentTarget.textContent='×'+fa(r);
 };
 rail.onclick=(e)=>{ const r=rail.getBoundingClientRect(); const ratio=(e.clientX-r.left)/r.width;
-  a.currentTime=Math.min((a.duration||7200)-1,Math.max(0,ratio*(a.duration||7200))); };
+  a.currentTime=Math.min((a.duration||DEFAULT_DURATION)-1,Math.max(0,ratio*(a.duration||DEFAULT_DURATION))); };
 tick();
 </script>
 </body>

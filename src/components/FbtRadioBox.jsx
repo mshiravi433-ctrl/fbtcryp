@@ -3,7 +3,13 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useFbtRadioStore } from '../store/useFbtRadioStore';
-import { autoplayOnce, play, pause, seek, skip, toggleMute, cycleRate } from '../lib/fbtRadioEngine';
+import {
+  FBT_RADIO_URL, autoplayOnce, play, pause, seek, skip, toggleMute, cycleRate
+} from '../lib/fbtRadioEngine';
+import {
+  FBT_RADIO_CHAPTERS, FBT_RADIO_DURATION_LABEL, FBT_RADIO_DURATION_SECONDS,
+  FBT_RADIO_TOPIC_COUNT
+} from '../lib/fbtRadioMetadata';
 import '../styles/fbt-radio.css';
 
 /**
@@ -14,9 +20,9 @@ import '../styles/fbt-radio.css';
  *    باشد و مدرن باشد خیلی و تنها در زبان فارسی بیاد»
  *
  * So: one box, Persian only, autoplaying, and it has to look designed rather
- * than assembled. This is the 2-hour broadcast built for FBT — 42 chapters,
- * eight original music beds, the interview block and the whale radar — not a
- * podcast list.
+ * than assembled. This is FBT's 2-hour, 15-minute broadcast, extended with ten
+ * conversational lessons, fresh original music and the whale-radar block —
+ * not a podcast list.
  *
  * ─── WHY IT IS GATED ON THE LANGUAGE ────────────────────────────────────────
  * The programme is recorded in Persian. Showing a Persian-only audio box to a
@@ -32,20 +38,7 @@ import '../styles/fbt-radio.css';
  * animating over silence. A control that lies about what it is doing is worse
  * than a control that asks.
  */
-const CHAPTERS = [
-  { t: 9, label: 'معرفی رادیو FBT' },
-  { t: 637.08, label: 'کریپتو چیست؟' },
-  { t: 690.56, label: 'بیت‌کوین، پادشاه بازار' },
-  { t: 740.36, label: 'اتریوم و آلت‌کوین‌ها' },
-  { t: 1120.42, label: 'مصاحبه ویژه' },
-  { t: 1223.98, label: 'رادار نهنگ‌ها' },
-  { t: 2080.05, label: 'اخبار داغ کریپتو' },
-  { t: 2132.05, label: 'آینده کریپتو' },
-  { t: 2470.53, label: 'استیبل‌کوین و دیفای' },
-  { t: 2528.17, label: 'ان‌اف‌تی و متاورس' },
-  { t: 2584.85, label: 'آموزش ترید' },
-  { t: 2640.17, label: 'امنیت کیف پول' }
-];
+const CHAPTERS = FBT_RADIO_CHAPTERS;
 
 const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
 const faNum = (value) =>
@@ -107,7 +100,7 @@ export default function FbtRadioBox() {
     if (!rect) return;
     /* The card is RTL, the rail is LTR: compute against the rail itself. */
     const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    seek(ratio * (duration || 7200));
+    seek(ratio * (duration || FBT_RADIO_DURATION_SECONDS));
   };
 
   return (
@@ -158,7 +151,7 @@ export default function FbtRadioBox() {
         </div>
 
         <div className="fbr-body">
-          <p className="fbr-kicker">برنامه دو ساعته · دنیای کریپتو</p>
+          <p className="fbr-kicker">برنامهٔ {FBT_RADIO_DURATION_LABEL} · گفت‌وگوی آموزشی دو میزبان</p>
           <h2 className="fbr-title">
             رادیو <b>اف‌بی‌تی</b>
             <span className="fbr-wave" aria-hidden="true">
@@ -180,9 +173,9 @@ export default function FbtRadioBox() {
           </p>
 
           <div className="fbr-chips">
-            <span className="fbr-chip">۲ ساعت پیوسته</span>
-            <span className="fbr-chip">۴۲ فصل</span>
-            <span className="fbr-chip">۸ ترک اختصاصی</span>
+            <span className="fbr-chip">{FBT_RADIO_DURATION_LABEL}</span>
+            <span className="fbr-chip">{faNum(FBT_RADIO_TOPIC_COUNT)} فصل آموزشی تازه</span>
+            <span className="fbr-chip">دو میزبان · موسیقی اختصاصی بی‌تکرار</span>
             <span className="fbr-chip fbr-chip-whale">🐋 رادار نهنگ‌ها</span>
           </div>
         </div>
@@ -212,14 +205,14 @@ export default function FbtRadioBox() {
             <span
               key={c.t}
               className="fbr-rail-tick"
-              style={{ left: `${(c.t / (duration || 7200)) * 100}%` }}
+              style={{ left: `${(c.t / (duration || FBT_RADIO_DURATION_SECONDS)) * 100}%` }}
             />
           ))}
         </div>
         <div className="fbr-times">
           <span>{faClock(time)}</span>
-          <span className="fbr-remain">−{faClock((duration || 7200) - time)}</span>
-          <span>{faClock(duration || 7200)}</span>
+          <span className="fbr-remain">−{faClock((duration || FBT_RADIO_DURATION_SECONDS) - time)}</span>
+          <span>{faClock(duration || FBT_RADIO_DURATION_SECONDS)}</span>
         </div>
       </div>
 
@@ -272,7 +265,7 @@ export default function FbtRadioBox() {
           ×{faNum(rate)}
         </button>
 
-        <a className="fbr-ctl fbr-dl" href="/radio/fbt-radio-2h.mp3" download aria-label="دانلود فایل رادیو">
+        <a className="fbr-ctl fbr-dl" href={FBT_RADIO_URL} download aria-label="دانلود فایل رادیو">
           ⤓
         </a>
       </div>
@@ -297,7 +290,7 @@ export default function FbtRadioBox() {
       </div>
 
       <p className="fbr-note">
-        موسیقی و صداها اختصاصی رادیو اف‌بی‌تی است · برنامه آموزشی است و توصیهٔ مالی نیست.
+        گفت‌وگوی سناریویی دو میزبان با موسیقی اختصاصی تازه · آموزشی است، نه مصاحبهٔ زنده یا توصیهٔ مالی.
       </p>
     </motion.section>
   );

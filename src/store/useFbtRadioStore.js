@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { FBT_RADIO_DURATION_SECONDS } from '../lib/fbtRadioMetadata';
 
 /**
  * FBT LIVE RADIO — playback state, held above every screen.
@@ -37,7 +38,7 @@ export const useFbtRadioStore = create((set) => ({
   error: false,
 
   time: 0,
-  duration: 7200,
+  duration: FBT_RADIO_DURATION_SECONDS,
   buffered: 0,
 
   muted: false,

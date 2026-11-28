@@ -1,0 +1,183 @@
+{
+  "version": 5,
+  "baseDurationSeconds": 7200,
+  "openingSeconds": 18,
+  "naturalPauseSeconds": 0.42,
+  "turnPauseSeconds": 0.28,
+  "interludeSeconds": 60,
+  "outroSeconds": 18,
+  "dialogue": [
+    {
+      "id": "history",
+      "title": "تاریخچه کریپتو",
+      "music": "history",
+      "turns": [
+        {
+          "speaker": "امیر",
+          "audio": "fbt-radio-dialogue-v3-01-history-amir.mp3"
+        },
+        {
+          "speaker": "رها",
+          "audio": "fbt-radio-dialogue-v2-01-history-raha.mp3"
+        }
+      ]
+    },
+    {
+      "id": "trading-candles",
+      "title": "شناخت ترید و نمودار شمعی",
+      "music": "candles",
+      "turns": [
+        {
+          "speaker": "رها",
+          "audio": "fbt-radio-dialogue-v2-02-candles-raha.mp3"
+        },
+        {
+          "speaker": "امیر",
+          "audio": "fbt-radio-dialogue-v3-02-candles-amir.mp3"
+        }
+      ]
+    },
+    {
+      "id": "venom-dydx",
+      "title": "ونوم و dYdX",
+      "music": "venues",
+      "turns": [
+        {
+          "speaker": "امیر",
+          "audio": "fbt-radio-dialogue-v3-03-venues-amir.mp3"
+        },
+        {
+          "speaker": "رها",
+          "audio": "fbt-radio-dialogue-v2-03-venues-raha.mp3"
+        }
+      ]
+    },
+    {
+      "id": "swap-signal",
+      "title": "سواپ و سیگنال",
+      "music": "swap",
+      "turns": [
+        {
+          "speaker": "رها",
+          "audio": "fbt-radio-dialogue-v2-04-swap-raha.mp3"
+        },
+        {
+          "speaker": "امیر",
+          "audio": "fbt-radio-dialogue-v3-04-swap-amir.mp3"
+        }
+      ]
+    },
+    {
+      "id": "wallet-safety",
+      "title": "والت، والت‌کانکت و نگهداری امن",
+      "music": "wallet",
+      "turns": [
+        {
+          "speaker": "رها",
+          "audio": "fbt-radio-dialogue-v2-05-wallet-raha.mp3"
+        },
+        {
+          "speaker": "امیر",
+          "audio": "fbt-radio-dialogue-v3-05-wallet-amir.mp3"
+        }
+      ]
+    },
+    {
+      "id": "networks",
+      "title": "شبکه‌ها و تفاوت‌هایشان",
+      "music": "networks",
+      "turns": [
+        {
+          "speaker": "امیر",
+          "audio": "fbt-radio-dialogue-v3-06-networks-amir.mp3"
+        },
+        {
+          "speaker": "رها",
+          "audio": "fbt-radio-dialogue-06-networks.mp3"
+        }
+      ]
+    },
+    {
+      "id": "farm",
+      "title": "فارم و شرایط استفاده",
+      "music": "farm",
+      "turns": [
+        {
+          "speaker": "امیر",
+          "audio": "fbt-radio-dialogue-v3-07-farm-amir.mp3"
+        },
+        {
+          "speaker": "رها",
+          "audio": "fbt-radio-dialogue-v5-07-farm-raha.mp3"
+        }
+      ]
+    },
+    {
+      "id": "global-smart-money",
+      "title": "FBT جهانی و اسمارت‌مانی",
+      "music": "global",
+      "turns": [
+        {
+          "speaker": "امیر",
+          "audio": "fbt-radio-dialogue-v3-08-global-amir.mp3"
+        },
+        {
+          "speaker": "رها",
+          "audio": "fbt-radio-dialogue-08-global-smart-money.mp3"
+        }
+      ]
+    },
+    {
+      "id": "futures-tabs",
+      "title": "فیوچرز و تفاوت تب‌ها",
+      "music": "futures",
+      "turns": [
+        {
+          "speaker": "امیر",
+          "audio": "fbt-radio-dialogue-v3-09-futures-amir.mp3"
+        },
+        {
+          "speaker": "رها",
+          "audio": "fbt-radio-dialogue-v5-09-futures-raha.mp3"
+        }
+      ]
+    },
+    {
+      "id": "auto-orders",
+      "title": "استفاده از سفارش خودکار",
+      "music": "auto",
+      "turns": [
+        {
+          "speaker": "امیر",
+          "audio": "fbt-radio-dialogue-v3-10-auto-amir.mp3"
+        },
+        {
+          "speaker": "رها",
+          "audio": "fbt-radio-dialogue-10-auto-orders.mp3"
+        }
+      ]
+    }
+  ],
+  "interludes": [
+    {
+      "after": 2,
+      "title": "موسیقی اختصاصی — مکث روی نمودار",
+      "music": "chart-break"
+    },
+    {
+      "after": 4,
+      "title": "موسیقی اختصاصی — مسیرهای نقدینگی",
+      "music": "liquidity-break"
+    },
+    {
+      "after": 6,
+      "title": "موسیقی اختصاصی — نقشه شبکه‌ها",
+      "music": "network-break"
+    },
+    {
+      "after": 8,
+      "title": "موسیقی اختصاصی — آرامش پیش از تصمیم",
+      "music": "risk-break"
+    }
+  ]
+}

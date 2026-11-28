@@ -1,4 +1,4 @@
-"""Tiny static server with HTTP Range support (needed for seeking in the 2-hour MP3)."""
+"""Tiny static server with HTTP Range support for the extended FBT Radio MP3."""
 import os
 import re
 import sys
@@ -12,10 +12,25 @@ class RangeHandler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
 
+    def translate_path(self, path):
+        # Mirror the web app's public/ URL layout for the standalone player.
+        if path.startswith("/radio/"):
+            path = "/public" + path
+        return super().translate_path(path)
+
     def end_headers(self):
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("Cache-Control", "public, max-age=300")
         super().end_headers()
+
+    def do_GET(self):
+        # Make the shareable local/preview URL land on the radio, not a file index.
+        if self.path.split("?", 1)[0] == "/":
+            self.send_response(302)
+            self.send_header("Location", "/radio_fbt.html")
+            self.end_headers()
+            return
+        super().do_GET()
 
     def send_head(self):
         rng = self.headers.get("Range")

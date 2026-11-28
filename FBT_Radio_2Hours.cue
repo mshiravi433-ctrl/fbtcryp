@@ -1,171 +1,235 @@
 PERFORMER "FBT Radio"
-TITLE "FBT Radio — پخش ۲ ساعته دنیای کریپتو"
-FILE "FBT_Radio_2Hours_HQ.mp3" MP3
+TITLE "FBT Radio — پخش ۲ ساعت و ۱۵ دقیقه‌ای دنیای کریپتو"
+FILE "public/radio/fbt-radio-2h.mp3" MP3
   TRACK 01 AUDIO
     TITLE "معرفی رادیو FBT"
     PERFORMER "FBT Radio"
-    INDEX 01 00:00:09.000
+    INDEX 01 00:09:00
   TRACK 02 AUDIO
     TITLE "ست موسیقی ۱ — طلوع بازار"
     PERFORMER "FBT Radio"
-    INDEX 01 00:00:55.040
+    INDEX 01 00:55:03
   TRACK 03 AUDIO
     TITLE "کریپتو چیست؟"
     PERFORMER "FBT Radio"
-    INDEX 01 00:10:37.080
+    INDEX 01 10:37:06
   TRACK 04 AUDIO
     TITLE "بیت‌کوین، پادشاه بازار"
     PERFORMER "FBT Radio"
-    INDEX 01 00:11:30.560
+    INDEX 01 11:30:42
   TRACK 05 AUDIO
     TITLE "اتریوم و آلت‌کوین‌ها"
     PERFORMER "FBT Radio"
-    INDEX 01 00:12:20.360
+    INDEX 01 12:20:27
   TRACK 06 AUDIO
     TITLE "ست موسیقی ۲ — مدار"
     PERFORMER "FBT Radio"
-    INDEX 01 00:13:15.560
+    INDEX 01 13:15:42
   TRACK 07 AUDIO
     TITLE "مصاحبه: ساختار بازار"
     PERFORMER "FBT Radio"
-    INDEX 01 00:18:40.420
+    INDEX 01 18:40:32
   TRACK 08 AUDIO
     TITLE "مصاحبه: تحلیل آنچین"
     PERFORMER "FBT Radio"
-    INDEX 01 00:19:03.420
+    INDEX 01 19:03:31
   TRACK 09 AUDIO
     TITLE "مصاحبه: حرکت نهنگ‌ها"
     PERFORMER "FBT Radio"
-    INDEX 01 00:20:23.980
+    INDEX 01 20:23:73
   TRACK 10 AUDIO
     TITLE "مصاحبه: رادار نهنگ‌ها"
     PERFORMER "FBT Radio"
-    INDEX 01 00:20:37.940
+    INDEX 01 20:37:71
   TRACK 11 AUDIO
     TITLE "مصاحبه: آینده بازار"
     PERFORMER "FBT Radio"
-    INDEX 01 00:22:14.220
+    INDEX 01 22:14:16
   TRACK 12 AUDIO
     TITLE "مصاحبه: سه موج آینده"
     PERFORMER "FBT Radio"
-    INDEX 01 00:22:26.860
+    INDEX 01 22:26:64
   TRACK 13 AUDIO
     TITLE "ست موسیقی ۳ — عمق بازار"
     PERFORMER "FBT Radio"
-    INDEX 01 00:24:14.380
+    INDEX 01 24:14:29
   TRACK 14 AUDIO
     TITLE "اخبار داغ کریپتو"
     PERFORMER "FBT Radio"
-    INDEX 01 00:34:40.050
+    INDEX 01 34:40:04
   TRACK 15 AUDIO
     TITLE "آینده کریپتو"
     PERFORMER "FBT Radio"
-    INDEX 01 00:35:32.050
+    INDEX 01 35:32:04
   TRACK 16 AUDIO
     TITLE "ست موسیقی ۴ — روند صعودی"
     PERFORMER "FBT Radio"
-    INDEX 01 00:36:32.450
+    INDEX 01 36:32:34
   TRACK 17 AUDIO
     TITLE "استیبل‌کوین و دیفای"
     PERFORMER "FBT Radio"
-    INDEX 01 00:41:10.530
+    INDEX 01 41:10:40
   TRACK 18 AUDIO
     TITLE "ان‌اف‌تی و متاورس"
     PERFORMER "FBT Radio"
-    INDEX 01 00:42:08.170
+    INDEX 01 42:08:13
   TRACK 19 AUDIO
     TITLE "آموزش ترید حرفه‌ای"
     PERFORMER "FBT Radio"
-    INDEX 01 00:43:04.850
+    INDEX 01 43:04:64
   TRACK 20 AUDIO
     TITLE "امنیت و کیف پول"
     PERFORMER "FBT Radio"
-    INDEX 01 00:44:00.170
+    INDEX 01 44:00:13
   TRACK 21 AUDIO
     TITLE "ست موسیقی ۵ — رادار نهنگ‌ها"
     PERFORMER "FBT Radio"
-    INDEX 01 00:44:54.730
+    INDEX 01 44:54:55
   TRACK 22 AUDIO
     TITLE "اخبار داغ کریپتو"
     PERFORMER "FBT Radio"
-    INDEX 01 00:56:23.730
+    INDEX 01 56:23:55
   TRACK 23 AUDIO
     TITLE "آینده کریپتو"
     PERFORMER "FBT Radio"
-    INDEX 01 00:57:15.730
+    INDEX 01 57:15:55
   TRACK 24 AUDIO
     TITLE "ست موسیقی ۶ — نقدینگی"
     PERFORMER "FBT Radio"
-    INDEX 01 00:58:16.130
+    INDEX 01 58:16:10
   TRACK 25 AUDIO
     TITLE "آموزش ترید حرفه‌ای"
     PERFORMER "FBT Radio"
-    INDEX 01 01:08:57.840
+    INDEX 01 68:57:63
   TRACK 26 AUDIO
     TITLE "امنیت و کیف پول"
     PERFORMER "FBT Radio"
-    INDEX 01 01:09:53.160
+    INDEX 01 69:53:12
   TRACK 27 AUDIO
     TITLE "ست موسیقی ۷ — شبانه"
     PERFORMER "FBT Radio"
-    INDEX 01 01:10:47.720
+    INDEX 01 70:47:54
   TRACK 28 AUDIO
     TITLE "مصاحبه: ساختار بازار"
     PERFORMER "FBT Radio"
-    INDEX 01 01:19:53.180
+    INDEX 01 79:53:13
   TRACK 29 AUDIO
     TITLE "مصاحبه: تحلیل آنچین"
     PERFORMER "FBT Radio"
-    INDEX 01 01:20:16.180
+    INDEX 01 80:16:14
   TRACK 30 AUDIO
     TITLE "مصاحبه: حرکت نهنگ‌ها"
     PERFORMER "FBT Radio"
-    INDEX 01 01:21:36.740
+    INDEX 01 81:36:56
   TRACK 31 AUDIO
     TITLE "مصاحبه: رادار نهنگ‌ها"
     PERFORMER "FBT Radio"
-    INDEX 01 01:21:50.700
+    INDEX 01 81:50:52
   TRACK 32 AUDIO
     TITLE "مصاحبه: آینده بازار"
     PERFORMER "FBT Radio"
-    INDEX 01 01:23:26.980
+    INDEX 01 83:26:73
   TRACK 33 AUDIO
     TITLE "مصاحبه: سه موج آینده"
     PERFORMER "FBT Radio"
-    INDEX 01 01:23:39.620
+    INDEX 01 83:39:47
   TRACK 34 AUDIO
     TITLE "ست موسیقی ۸ — سیگنال"
     PERFORMER "FBT Radio"
-    INDEX 01 01:25:27.140
+    INDEX 01 85:27:11
   TRACK 35 AUDIO
     TITLE "کریپتو چیست؟"
     PERFORMER "FBT Radio"
-    INDEX 01 01:35:04.680
+    INDEX 01 95:04:51
   TRACK 36 AUDIO
     TITLE "بیت‌کوین، پادشاه بازار"
     PERFORMER "FBT Radio"
-    INDEX 01 01:35:58.160
+    INDEX 01 95:58:12
   TRACK 37 AUDIO
     TITLE "اتریوم و آلت‌کوین‌ها"
     PERFORMER "FBT Radio"
-    INDEX 01 01:36:47.960
+    INDEX 01 96:47:72
   TRACK 38 AUDIO
     TITLE "ست موسیقی ۹ — آلت‌کوین‌ها"
     PERFORMER "FBT Radio"
-    INDEX 01 01:37:43.160
+    INDEX 01 97:43:12
   TRACK 39 AUDIO
     TITLE "استیبل‌کوین و دیفای"
     PERFORMER "FBT Radio"
-    INDEX 01 01:47:20.710
+    INDEX 01 107:20:53
   TRACK 40 AUDIO
     TITLE "ان‌اف‌تی و متاورس"
     PERFORMER "FBT Radio"
-    INDEX 01 01:48:18.350
+    INDEX 01 108:18:26
   TRACK 41 AUDIO
     TITLE "ست موسیقی ۱۰ — افق"
     PERFORMER "FBT Radio"
-    INDEX 01 01:49:15.030
+    INDEX 01 109:15:02
   TRACK 42 AUDIO
     TITLE "معرفی رادیو FBT"
     PERFORMER "FBT Radio"
-    INDEX 01 01:59:13.960
+    INDEX 01 119:13:72
+  TRACK 43 AUDIO
+    TITLE "موسیقی اختصاصی — آغاز گفت‌وگو"
+    PERFORMER "FBT Radio"
+    INDEX 01 120:00:00
+  TRACK 44 AUDIO
+    TITLE "تاریخچه کریپتو"
+    PERFORMER "FBT Radio"
+    INDEX 01 120:18:00
+  TRACK 45 AUDIO
+    TITLE "شناخت ترید و نمودار شمعی"
+    PERFORMER "FBT Radio"
+    INDEX 01 121:08:67
+  TRACK 46 AUDIO
+    TITLE "موسیقی اختصاصی — مکث روی نمودار"
+    PERFORMER "FBT Radio"
+    INDEX 01 121:58:09
+  TRACK 47 AUDIO
+    TITLE "ونوم و dYdX"
+    PERFORMER "FBT Radio"
+    INDEX 01 122:58:09
+  TRACK 48 AUDIO
+    TITLE "سواپ و سیگنال"
+    PERFORMER "FBT Radio"
+    INDEX 01 123:53:64
+  TRACK 49 AUDIO
+    TITLE "موسیقی اختصاصی — مسیرهای نقدینگی"
+    PERFORMER "FBT Radio"
+    INDEX 01 124:47:62
+  TRACK 50 AUDIO
+    TITLE "والت، والت‌کانکت و نگهداری امن"
+    PERFORMER "FBT Radio"
+    INDEX 01 125:47:62
+  TRACK 51 AUDIO
+    TITLE "شبکه‌ها و تفاوت‌هایشان"
+    PERFORMER "FBT Radio"
+    INDEX 01 126:41:21
+  TRACK 52 AUDIO
+    TITLE "موسیقی اختصاصی — نقشه شبکه‌ها"
+    PERFORMER "FBT Radio"
+    INDEX 01 127:47:15
+  TRACK 53 AUDIO
+    TITLE "فارم و شرایط استفاده"
+    PERFORMER "FBT Radio"
+    INDEX 01 128:47:15
+  TRACK 54 AUDIO
+    TITLE "FBT جهانی و اسمارت‌مانی"
+    PERFORMER "FBT Radio"
+    INDEX 01 130:11:04
+  TRACK 55 AUDIO
+    TITLE "موسیقی اختصاصی — آرامش پیش از تصمیم"
+    PERFORMER "FBT Radio"
+    INDEX 01 131:21:68
+  TRACK 56 AUDIO
+    TITLE "فیوچرز و تفاوت تب‌ها"
+    PERFORMER "FBT Radio"
+    INDEX 01 132:21:68
+  TRACK 57 AUDIO
+    TITLE "استفاده از سفارش خودکار"
+    PERFORMER "FBT Radio"
+    INDEX 01 134:01:23
+  TRACK 58 AUDIO
+    TITLE "موسیقی اختصاصی — پایان برنامه"
+    PERFORMER "FBT Radio"
+    INDEX 01 135:25:07
