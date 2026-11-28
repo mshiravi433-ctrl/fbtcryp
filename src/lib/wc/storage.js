@@ -326,7 +326,7 @@ export function hasStoredSession(storage) {
 /**
  * WalletConnect's browser SDK 1.1.1 migrates its store from localStorage to
  * IndexedDB (WALLET_CONNECT_V2_INDEXED_DB / keyvaluestorage). unstorage also
- * normalizes '/' to ':'. A localStorage-only probe is therefore not evidence
+ * normalizes separators to a single ':'. A localStorage-only probe is not evidence
  * that a returning session is missing. Never return 'missing' when the DB
  * could not be read: only the SDK can decide in that case.
  */
@@ -368,7 +368,7 @@ export async function storedSessionStatus({ indexedDb = globalThis.indexedDB, ti
           const item = cursor.result;
           if (!item) return finish('missing');
           const key = String(item.key || '');
-          if (/^wc@2:.*(?:::|\/\/)session$/i.test(key)) {
+          if (/^wc@2:.*(?:::|:|\/\/)session$/i.test(key)) {
             try {
               const value = typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
               if (Array.isArray(value) && value.length) return finish('found');

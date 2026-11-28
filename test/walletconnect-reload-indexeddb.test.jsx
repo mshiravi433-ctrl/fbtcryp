@@ -29,7 +29,7 @@ async function seed() {
     req.onsuccess = () => {
       const db = req.result;
       const tx = db.transaction('keyvaluestorage', 'readwrite');
-      tx.objectStore('keyvaluestorage').put('[{"topic":"session"}]', 'wc@2:client:0.3::session');
+      tx.objectStore('keyvaluestorage').put('[{"topic":"session"}]', 'wc@2:client:0.3:session');
       tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = reject;
     };
     req.onerror = reject;

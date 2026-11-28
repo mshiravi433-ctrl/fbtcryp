@@ -5,7 +5,7 @@ import { storedSessionStatus, purgeIndexedWcKeys } from '../src/lib/wc/storage.j
 import { createWcSession } from '../src/lib/wc/session.js';
 
 const DB = 'WALLET_CONNECT_V2_INDEXED_DB';
-const KEY = 'wc@2:client:0.3::session';
+const KEY = 'wc@2:client:0.3:session';
 async function database() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, 1);
