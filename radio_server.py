@@ -32,7 +32,21 @@ class RangeHandler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def copyfile(self, source, outputfile):
+        remaining = getattr(self, "_range_length", None)
+        if remaining is None:
+            return super().copyfile(source, outputfile)
+
+        self._range_length = None
+        while remaining > 0:
+            chunk = source.read(min(64 * 1024, remaining))
+            if not chunk:
+                break
+            outputfile.write(chunk)
+            remaining -= len(chunk)
+
     def send_head(self):
+        self._range_length = None
         rng = self.headers.get("Range")
         path = self.translate_path(self.path)
         if not rng or not os.path.isfile(path):
@@ -58,6 +72,7 @@ class RangeHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(length))
         self.send_header("Last-Modified", self.date_time_string(os.path.getmtime(path)))
         self.end_headers()
+        self._range_length = length
         return f
 
     def log_message(self, fmt, *args):

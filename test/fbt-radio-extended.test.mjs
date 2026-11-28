@@ -1,12 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   FBT_RADIO_CHAPTERS,
   FBT_RADIO_DURATION_LABEL,
   FBT_RADIO_DURATION_SECONDS,
   FBT_RADIO_TOPIC_COUNT
 } from '../src/lib/fbtRadioMetadata.js';
+import { publishRadioStandaloneFiles } from '../radio_build/publish_standalone.mjs';
 
 const manifest = JSON.parse(readFileSync(new URL('../radio_build/dialogue_2026-11-fa.json', import.meta.url), 'utf8'));
 const player = readFileSync(new URL('../src/components/FbtRadioBox.jsx', import.meta.url), 'utf8');
@@ -14,6 +17,7 @@ const engine = readFileSync(new URL('../src/lib/fbtRadioEngine.js', import.meta.
 const standalone = readFileSync(new URL('../radio_fbt.html', import.meta.url), 'utf8');
 const preview = readFileSync(new URL('../fbt-radio-box-preview.html', import.meta.url), 'utf8');
 const cue = readFileSync(new URL('../FBT_Radio_2Hours.cue', import.meta.url), 'utf8');
+const chapterExportPath = new URL('../FBT_Radio_2Hours_chapters.txt', import.meta.url);
 const streamPath = new URL('../public/radio/fbt-radio-2h.mp3', import.meta.url);
 const standaloneDurationMatch = standalone.match(/const DEFAULT_DURATION = ([\d.]+);/);
 
@@ -86,6 +90,25 @@ test('the app and both player pages request the current version and expose synce
       previewPairs.some(([time, title]) => time === chapter.t && title === chapter.label),
       `design preview has the current offset for ${chapter.label}`
     );
+  }
+});
+
+test('the production output includes the standalone player and its chapter download', () => {
+  const outDir = mkdtempSync(join(tmpdir(), 'fbt-radio-output-'));
+  try {
+    const emitted = publishRadioStandaloneFiles(outDir);
+    assert.deepEqual(emitted, ['radio_fbt.html', 'FBT_Radio_2Hours_chapters.txt']);
+
+    const deployedPlayer = readFileSync(join(outDir, 'radio_fbt.html'), 'utf8');
+    assert.match(deployedPlayer, /20261127-dialogue-v5/);
+    assert.match(deployedPlayer, /src="\/radio\/fbt-radio-cover\.jpg"/);
+    assert.match(deployedPlayer, /href="FBT_Radio_2Hours_chapters\.txt"/);
+    assert.equal(
+      readFileSync(join(outDir, 'FBT_Radio_2Hours_chapters.txt'), 'utf8'),
+      readFileSync(chapterExportPath, 'utf8')
+    );
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
   }
 });
 

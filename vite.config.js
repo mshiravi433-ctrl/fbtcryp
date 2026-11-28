@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { assertFarmRollout } from './scripts/farm-rollout-policy.mjs';
 import { vendorKronosOrt } from './scripts/vendor-kronos-ort.mjs';
+import { publishRadioStandaloneFiles } from './radio_build/publish_standalone.mjs';
 
 /*
  * Evaluate the money-in rollout policy while Vite loads its config. This is
@@ -230,8 +231,25 @@ function vendorKronosOrtEngine() {
   };
 }
 
+/**
+ * Publish the separately maintained radio page and chapter export alongside
+ * the Vite app. They live at the repository root for the standalone radio
+ * server and are otherwise omitted from Vite's output directory.
+ */
+function publishRadioStandalone() {
+  return {
+    name: 'fbt-radio-standalone-files',
+    apply: 'build',
+    writeBundle(outputOptions) {
+      const outputDir = outputOptions.dir ?? 'dist';
+      const files = publishRadioStandaloneFiles(outputDir);
+      console.log(`[radio] published ${files.join(', ')} to ${outputDir}`);
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), stripDisabledLocaleCopy(), stripSpeculativeVocabulary(), vendorKronosOrtEngine()],
+  plugins: [react(), stripDisabledLocaleCopy(), stripSpeculativeVocabulary(), vendorKronosOrtEngine(), publishRadioStandalone()],
 
   /*
    * `@dydxprotocol/v4-client-js` imports `https-proxy-agent` even though the
