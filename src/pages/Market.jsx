@@ -134,6 +134,7 @@ import '../styles/market-token-2026.css';
  * breakpoint so a narrow screen never pays for the desktop bento.
  */
 import '../styles/market-studio.css';
+import '../styles/market-global-banners.css';
 import { marketCapSeries } from '../lib/globalTrend';
 import { useCoinSearch, useGlobalStats, useMarkets, useTrending } from '../hooks/useMarket';
 import { fmtCompact, fmtNum, fmtPct } from '../lib/format';

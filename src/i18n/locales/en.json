@@ -5288,11 +5288,12 @@
     "watchHint": "Alerts · your confirmation"
   },
   "marketGlobalAd": {
-    "eyebrow": "FBT · GLOBAL INTELLIGENCE",
-    "title": "A connected world. A clearer perspective.",
-    "desc": "Explore a global view, intelligent analysis and AI assistants in the FBT Global Intelligence workspace.",
+    "eyebrow": "GLOBAL MARKETS",
+    "title": "One view. Every market.",
+    "desc": "Follow crypto, equities and macro trends from a single global dashboard.",
     "note": "Insights for awareness, not guaranteed returns",
-    "cta": "Explore Global Intelligence",
+    "cta": "Explore global markets",
+    "previewLabel": "Market overview",
     "input": "Data",
     "brain": "Global AI",
     "insight": "Insights",
